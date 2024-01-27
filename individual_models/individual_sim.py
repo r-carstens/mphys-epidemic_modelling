@@ -10,7 +10,7 @@ immune = 'M'
 
 # Epidemiological Parameters
 gamma = 0.1
-sigma = 0.5
+sigma = 0
 
 
 ##### NETWORK INITIALISATION
@@ -110,7 +110,7 @@ def complete_step(G):
         if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=True):
             target_after = infected
 
-    return G, target_node, source_node, target_before, target_after
+    return G, source_node, target_node, source_during, target_before, target_after
 
 
 def get_state_totals(G):
@@ -123,17 +123,17 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation(G, N, I0, sim_time, out_file_name):
+def run_simulation(G, n_nodes, I0, sim_time, out_file_name):
 
     # Creating a file to store the results to
     infection_outfile = open(out_file_name, 'w')
-    infection_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (N, I0, sim_time,gamma,sigma))
-    infection_outfile.write('\ntimestep,target_label,source_label,target_before,target_after,total_S,total_I,total_M')
+    infection_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    infection_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
     for t in range(sim_time):
 
         # Completing an iteration step
-        G, target_label, source_label, target_before, target_after = complete_step(G)
+        G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
 
         # Updating network if required
         if target_before != target_after:
@@ -143,8 +143,8 @@ def run_simulation(G, N, I0, sim_time, out_file_name):
         S_total, I_total, M_total = get_state_totals(G)
 
         # Logging the results
-        infection_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s' % (
-        t, target_label, source_label, target_before, target_after, S_total, I_total, M_total))
+        infection_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+        t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
         # Displaying the progress
         if t % 1000 == 0:
@@ -158,7 +158,7 @@ def run_simulation(G, N, I0, sim_time, out_file_name):
 
 # Setting simulation data
 N = 1000
-I0 = 100
+I0 = 1
 t_max = 100000
 out_file = 'individual_sim_outfile.txt'
 
@@ -167,16 +167,18 @@ G = initialise_graph(n_nodes=N)
 G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
 # Running the simulation
-run_simulation(G, N=N, I0=I0, sim_time=t_max, out_file_name=out_file)
+run_simulation(G, n_nodes=N, I0=I0, sim_time=t_max, out_file_name=out_file)
 
 # Importing transmission data
 df = pd.read_csv(out_file, delimiter=',', skiprows=1)
 
 # Plotting the results
-plt.title('State Totals versus Time for Individual SIM Model')
-plt.plot(df['timestep'], df['total_S'], label=susceptible)
-plt.plot(df['timestep'], df['total_I'], label=infected)
-plt.plot(df['timestep'], df['total_M'], label=immune)
+plt.title('Population totals versus time for individual SIM Model\n with gamma=%s and sigma=%s' % (gamma, sigma))
+plt.xlabel('Time (days)')
+plt.ylabel('Population sizes')
+plt.plot(df['timestep'], df['S_total'], label=susceptible)
+plt.plot(df['timestep'], df['I_total'], label=infected)
+plt.plot(df['timestep'], df['M_total'], label=immune)
 plt.legend()
 plt.show()
 
