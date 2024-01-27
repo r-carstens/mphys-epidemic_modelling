@@ -10,7 +10,7 @@ immune = 'M'
 
 # Epidemiological Parameters
 gamma = 0.1
-sigma = 0
+sigma = 0.5
 
 
 ##### NETWORK INITIALISATION
@@ -59,12 +59,16 @@ def initialise_infections(G, n_nodes, n_infected):
 
 ##### RUNNING THE SIMULATION
 
-def check_for_infection(G, source_label, target_label):
+def check_for_infection(G, source_label, target_label, reinfection):
 
     infection_event = False
 
     # Determining the probability of transmission along the node edge
     p_mosquito_transmission = G[source_label][target_label]['weight']
+
+    # Checking if the event is a reinfection (in which immunity loss is taken into account)
+    if reinfection:
+        p_mosquito_transmission *= sigma
 
     # Checking if an infection will occur
     if np.random.uniform() < p_mosquito_transmission:
@@ -82,16 +86,16 @@ def check_for_recovery():
 def complete_step(G):
 
     # Choosing two neighbours at random within the population
-    source_label, target_label = np.random.choice(np.arange(G.number_of_nodes()), size=2, replace=False)
+    source_node, target_node = np.random.choice(np.arange(G.number_of_nodes()), size=2, replace=False)
 
     # Determining the states of the target and source
-    target_before, source = G.nodes()[target_label]['state'], G.nodes()[source_label]['state']
+    target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
     target_after = target_before
 
-    if target_before == susceptible and source == infected:
+    if target_before == susceptible and source_during == infected:
 
-        # Determining if the node being interacted with is infected
-        if check_for_infection(G, source_label, target_label):
+        # Determining if the node being interacted with is infected and infection is transmitted
+        if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=False):
             target_after = infected
 
     elif target_before == infected:
@@ -100,7 +104,13 @@ def complete_step(G):
         if check_for_recovery():
             target_after = immune
 
-    return G, target_label, source_label, target_before, target_after
+    elif target_before == immune and source_during == infected:
+
+        # Determining if the node being interacted with is infected and infection is transmitted
+        if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=True):
+            target_after = infected
+
+    return G, target_node, source_node, target_before, target_after
 
 
 def get_state_totals(G):
@@ -113,13 +123,14 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation(G, sim_time, out_file):
+def run_simulation(G, N, I0, sim_time, out_file_name):
 
     # Creating a file to store the results to
-    infection_outfile = open(out_file, 'w')
-    infection_outfile.write('timestep,target_label,source_label,target_before,target_after,total_S,total_I,total_M')
+    infection_outfile = open(out_file_name, 'w')
+    infection_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (N, I0, sim_time,gamma,sigma))
+    infection_outfile.write('\ntimestep,target_label,source_label,target_before,target_after,total_S,total_I,total_M')
 
-    for t in sim_time:
+    for t in range(sim_time):
 
         # Completing an iteration step
         G, target_label, source_label, target_before, target_after = complete_step(G)
@@ -148,18 +159,18 @@ def run_simulation(G, sim_time, out_file):
 # Setting simulation data
 N = 1000
 I0 = 100
-t_data = np.arange(100000)
-out_file_name = 'individual_sim_outfile.txt'
+t_max = 100000
+out_file = 'individual_sim_outfile.txt'
 
 # Initialising the simulation
 G = initialise_graph(n_nodes=N)
-G = initialise_infections(G=G, n_nodes=N, n_infected=I0)
+G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
 # Running the simulation
-run_simulation(G=G, sim_time=t_data, out_file=out_file_name)
+run_simulation(G, N=N, I0=I0, sim_time=t_max, out_file_name=out_file)
 
 # Importing transmission data
-df = pd.read_csv(out_file_name, delimiter=',')
+df = pd.read_csv(out_file, delimiter=',', skiprows=1)
 
 # Plotting the results
 plt.title('State Totals versus Time for Individual SIM Model')
