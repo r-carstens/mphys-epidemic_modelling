@@ -53,7 +53,10 @@ def simulate_mutations(transmission_tree):
     return transmission_tree
 
 
-def simulate_variant_transmission(transmission_tree):
+def get_variant_transmission_tree(transmission_tree):
+
+    # Simulating variant mutations
+    transmission_tree = simulate_mutations(transmission_tree)
 
     # Initialising variant names and counter to allow for a new character to be chosen
     variant_characters = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
@@ -78,9 +81,36 @@ def simulate_variant_transmission(transmission_tree):
     return transmission_tree
 
 
+def get_variant_evolution_graph(variant_graph):
+
+    # Determining the variant names
+    unique_variants = np.unique([variant_graph.nodes()[node]['variant'] for node in variant_graph.nodes()])
+
+    # Creating a directed graph
+    evolution_graph = nx.DiGraph()
+
+    # Looping through each unique variant in the dataset
+    for variant in unique_variants:
+
+        # Mutations are denoted by the final instance of '_' (eg '1' becomes '1_2', but '1_2_3' is a mutation of '1_2')
+        mutations = variant.split('_')
+
+        # Looping through the data up to each instance of '_'
+        for i in range(1, len(mutations)):
+
+            # Adding an edge between the the old variant and new mutation (character after the final instance '_')
+            evolution_graph.add_edge('_'.join(mutations[:i]), '_'.join(mutations[:i + 1]))
+
+    # Creating a dictionary to store the labels and relabelling the nodes
+    variant_label_dict = dict(zip(unique_variants, np.arange(len(unique_variants))))
+    evolution_graph = nx.relabel_nodes(evolution_graph, variant_label_dict)
+
+    return evolution_graph
+
+
 ##### SAVING AND DISPLAYING THE RESULTS
 
-def save_variant_data(transmission_tree, out_file_name):
+def save_variant_transmission_data(transmission_tree, out_file_name):
 
     # Creating a dataframe to store the results
     variant_df = pd.DataFrame()
@@ -102,56 +132,32 @@ def save_variant_data(transmission_tree, out_file_name):
     variant_df.to_csv(out_file_name, sep='\t', index=False)
 
 
-def display_variant_graph(out_file_name):
-
-    # Reading the dataframe from the outfile
-    variant_df = pd.read_csv(out_file_name, delimiter='\t')
-
-    # Determining the unique variants
-    unique_variants = list(pd.unique(variant_df['variant_name']))[:50]
-
-    # Creating a directed graph
-    evolution_graph = nx.DiGraph()
-
-    # Looping through each unique variant in the dataset
-    for variant in unique_variants:
-
-        # Mutations are denoted by the final instance of '_' (eg '1' becomes '1_2', but '1_2_3' is a mutation of '1_2')
-        mutations = variant.split('_')
-
-        # Looping through the data up to each instance of '_'
-        for i in range(1, len(mutations)):
-
-            # Adding an edge between the the old variant and new mutation (character after the final instance '_')
-            evolution_graph.add_edge('_'.join(mutations[:i]), '_'.join(mutations[:i + 1]))
-
-    # Creating a dictionary to store the labels and relabelling the nodes
-    variant_label_dict = dict(zip(unique_variants, np.arange(len(unique_variants))))
-    evolution_graph = nx.relabel_nodes(evolution_graph, variant_label_dict)
+def display_evolutionary_tree(evolution_tree):
 
     # Drawing the graph as an evolutionary tree
     plt.title('Variant evolution for mutation probability=%s' % p_mutation)
-    nx.draw(evolution_graph, pos=graphviz_layout(evolution_graph, prog='dot'), with_labels=True)
+    nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True)
     plt.show()
 
 
 ##### MAIN
 
+# Filenames for data flow
+in_file = 'individual_sim_outfile_0.txt'
+out_file = 'variants_outfile.txt'
+
 # Importing transmission data and only retaining infection events
-df = pd.read_csv('individual_sim_outfile.txt', delimiter=',', skiprows=1)
+df = pd.read_csv(in_file, delimiter=',', skiprows=1)
 infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
 
 # Creating the graph and checking it is directed and acyclic
-transmission_tree = initialise_tree(infection_df)
-print('Graph is DAG: %s' % nx.is_directed_acyclic_graph(transmission_tree))
+transmission_tree = initialise_tree(infection_df=infection_df)
+print('Transmission Tree is DAG: %s' % nx.is_directed_acyclic_graph(transmission_tree))
 
-# Simulating infectious disease mutations and variant transmission
-mutation_tree = simulate_mutations(transmission_tree)
-variant_tree = simulate_variant_transmission(mutation_tree)
+# Simulating variant transmission and saving the data
+variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
+save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file_name=out_file)
 
-# Saving the data
-out_file = 'variants_outfile.txt'
-save_variant_data(variant_tree, out_file_name=out_file)
-
-# Displaying the results
-display_variant_graph(out_file_name=out_file)
+# Creating a graph to show variant evolution and displaying the results
+variant_evolution_tree = get_variant_evolution_graph(variant_graph=variant_transmission_tree)
+display_evolutionary_tree(evolution_tree=variant_evolution_tree)
