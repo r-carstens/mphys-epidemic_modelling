@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -10,7 +11,7 @@ immune = 'M'
 
 # Epidemiological Parameters
 gamma = 0.1
-sigma = 0
+sigma = 1
 
 
 ##### NETWORK INITIALISATION
@@ -123,7 +124,7 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation(G, n_nodes, I0, sim_time, out_file_name):
+def run_simulation_iteration(G, n_nodes, I0, sim_time, out_file_name):
 
     # Creating a file to store the results to
     infection_outfile = open(out_file_name, 'w')
@@ -154,33 +155,117 @@ def run_simulation(G, n_nodes, I0, sim_time, out_file_name):
     infection_outfile.close()
 
 
+def repeat_simulation(N, I0, t_max, out_file_prefix, num_iterations=1):
+
+    # Repeating entire simulation required number of times
+    for n in range(num_iterations):
+
+        # Creating a new outfile name
+        current_file_name = out_file_prefix + '_%s.txt' % n
+
+        # Initialising the simulation
+        G = initialise_graph(n_nodes=N)
+        G = initialise_infections(G, n_nodes=N, n_infected=I0)
+
+        # Running the simulation
+        run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, out_file_name=current_file_name)
+
+
+##### ANALYSING AND DISPLAYING DATA
+
+def get_results_dataframe():
+
+    # Locating all data files within the directory
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(out_file)]
+
+    # Creating a dataframe for each
+    dfs = [pd.read_csv(curr_file, delimiter=',', skiprows=1) for curr_file in sim_data_files]
+
+    # Looping through each dataframe
+    for counter, df in enumerate(dfs):
+
+        # Changing column names to match their origin file (i.e. 'column_name_number')
+        new_col_names = [df.columns[0]] + [col_name + '_%s' % counter for col_name in df.columns[1:]]
+        df.columns = new_col_names
+
+    # Creating a dataframe to store all resulting data in
+    results_df = pd.concat(dfs, axis=1)
+
+    # Only keeping the first timestep column
+    results_df = results_df.T.drop_duplicates().T
+
+    return results_df
+
+
+def get_state_dataframes(results_df):
+
+    # Extracting the state data
+    susceptible_df = results_df.filter(regex='S_total')
+    infected_df = results_df.filter(regex='I_total')
+    immune_df = results_df.filter(regex='M_total')
+
+    # Adding mean data
+    susceptible_df = susceptible_df.assign(S_total_mean=susceptible_df.mean(axis=1))
+    infected_df = infected_df.assign(I_total_mean=infected_df.mean(axis=1))
+    immune_df = immune_df.assign(M_total_mean=immune_df.mean(axis=1))
+
+    return susceptible_df, infected_df, immune_df
+
+
+def plot_state_totals(susceptible_df, infected_df, immune_df):
+
+    # Creating a list of the dataframes
+    all_state_dfs = susceptible_df, infected_df, immune_df
+
+    # Creating a list for legend labels and plot colors
+    labels = ['Susceptible', 'Infectious', 'Immune']
+    colors = ['navy', 'firebrick', 'g']
+
+    # Initialising a figure
+    fig, ax = plt.subplots()
+
+    # Looping through the remaining results
+    for counter, df in enumerate(all_state_dfs):
+
+        # Plotting the rough data with transparent lines
+        df[df.columns[:-1]].plot(ax=ax, alpha=0.1, color=colors[counter], legend=False)
+
+        # Plotting the mean data with a solid line
+        df[df.columns[-1]].plot(ax=ax, color=colors[counter], linewidth=2, label=labels[counter], legend=True)
+
+    # Adding plot titles and legend
+    plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (gamma, sigma))
+    plt.xlabel('Time (days)')
+    plt.ylabel('Population sizes')
+    plt.show()
+
+
 ##### MAIN
 
 # Setting simulation data
 N = 1000
 I0 = 1
 t_max = 100000
-out_file = 'individual_sim_outfile.txt'
 
-# Initialising the simulation
-G = initialise_graph(n_nodes=N)
-G = initialise_infections(G, n_nodes=N, n_infected=I0)
+# Creating out file name to be used for storing and reading data
+out_file = 'individual_sim_outfile'
 
-# Running the simulation
-run_simulation(G, n_nodes=N, I0=I0, sim_time=t_max, out_file_name=out_file)
+# # Repeating the simulation
+repeat_simulation(N=N, I0=I0, t_max=t_max, out_file_prefix=out_file, num_iterations=1)
 
-# Importing transmission data
-df = pd.read_csv(out_file, delimiter=',', skiprows=1)
+# Analysing the data
+results_df = get_results_dataframe()
+susceptible_df, infected_df, immune_df = get_state_dataframes(results_df=results_df)
 
-# Plotting the results
-plt.title('Population totals versus time for individual SIM Model\n with gamma=%s and sigma=%s' % (gamma, sigma))
-plt.xlabel('Time (days)')
-plt.ylabel('Population sizes')
-plt.plot(df['timestep'], df['S_total'], label=susceptible)
-plt.plot(df['timestep'], df['I_total'], label=infected)
-plt.plot(df['timestep'], df['M_total'], label=immune)
-plt.legend()
-plt.show()
+# Plotting the data
+plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df)
+
+
+
+
+
+
+
 
 
 
