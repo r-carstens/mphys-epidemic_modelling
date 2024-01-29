@@ -70,20 +70,20 @@ for i in range(len(t_range) - 1):
     mu_D_i = compartments.death_rates[i]
 
     # Determining the change in the susceptible compartment
-    dS_i = dt * (- beta * S_i * I_i  # infection process (fully susceptible)
+    dS_i = dt * (- beta * S_i * I_i                   # infection process (fully susceptible)
                  + mu_B * N_i * (1 - (N_i / N_star))  # birth process
-                 - mu_D_i * S_i)  # natural death process
+                 - mu_D_i * S_i)                      # natural death process
 
     # Determining the change in the infected compartment
-    dI_i = dt * (beta * S_i * I_i  # infection process (fully susceptible)
-                 + sigma * beta * M_i * I_i  # infection process (partially immune)
-                 - gamma * I_i  # recovery process
-                 - mu_D_i * I_i)  # natural death process
+    dI_i = dt * (beta * S_i * I_i                     # infection process (fully susceptible)
+                 + sigma * beta * M_i * I_i           # infection process (partially immune)
+                 - gamma * I_i                        # recovery process
+                 - mu_D_i * I_i)                      # natural death process
 
     # Determining the change in the partially immune compartment
-    dM_i = dt * (-sigma * beta * M_i * I_i  # infection process (partially immune)
-                 + gamma * I_i  # recovery process
-                 - mu_D_i * M_i)  # natural death process
+    dM_i = dt * (-sigma * beta * M_i * I_i            # infection process (partially immune)
+                 + gamma * I_i                        # recovery process
+                 - mu_D_i * M_i)                      # natural death process
 
     # Determining the change in the current death rate
     check_for_shock = int(np.random.uniform() < (kappa * dt))
