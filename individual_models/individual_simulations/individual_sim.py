@@ -175,24 +175,24 @@ def repeat_simulation(N, I0, t_max, out_file_prefix, num_iterations=1):
 
 def get_results_dataframe():
 
+    # Creating a dataframe to store all results from all files
+    results_df = pd.DataFrame()
+
     # Locating all data files within the directory
     sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(out_file)]
 
-    # Creating a dataframe for each
-    dfs = [pd.read_csv(curr_file, delimiter=',', skiprows=1) for curr_file in sim_data_files]
+    # Looping through each data file
+    for counter, file in enumerate(sim_data_files):
 
-    # Looping through each dataframe
-    for counter, df in enumerate(dfs):
+        # Reading in the data
+        current_df = pd.read_csv(file, delimiter=',', skiprows=1)
 
         # Changing column names to match their origin file (i.e. 'column_name_number')
-        new_col_names = [df.columns[0]] + [col_name + '_%s' % counter for col_name in df.columns[1:]]
-        df.columns = new_col_names
+        new_col_names = [current_df.columns[0]] + [col_name + '_%s' % counter for col_name in current_df.columns[1:]]
+        current_df.columns = new_col_names
 
-    # Creating a dataframe to store all resulting data in
-    results_df = pd.concat(dfs, axis=1)
-
-    # Only keeping the first timestep column
-    results_df = results_df.T.drop_duplicates().T
+        # Concatenating the current results to the results dataframe
+        results_df = pd.concat([results_df, current_df], axis=1)
 
     return results_df
 
