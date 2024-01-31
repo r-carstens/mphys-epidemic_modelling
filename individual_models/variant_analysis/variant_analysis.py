@@ -17,7 +17,11 @@ p_mutation = 0.3
 
 ##### INITIALISING THE TRANSMISSION TREE
 
-def initialise_tree(infection_df):
+def initialise_transmission_tree(in_file):
+
+    # Importing transmission data and only retaining infection events
+    df = pd.read_csv(in_file, delimiter=',', skiprows=1)
+    infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
 
     # Creating directed graph
     transmission_tree = nx.DiGraph()
@@ -33,21 +37,15 @@ def initialise_tree(infection_df):
     return transmission_tree
 
 
-##### SIMULATING MUTATIONS AND VARIANT TRANSMISSION
+##### SIMULATING AND SAVING VARIANT TRANSMISSION THROUGHOUT THE POPULATION
 
-def check_for_mutation():
-
-    # Checking if a mutation occurs for a given probability
-    return np.random.uniform() < p_mutation
-
-
-def simulate_mutations(transmission_tree):
+def simulate_variant_mutations(transmission_tree):
 
     # Looping through each node in the graph
     for node in transmission_tree.nodes():
 
         # Checking if a mutation occurs at the point of the node
-        if check_for_mutation():
+        if np.random.uniform() < p_mutation:
             transmission_tree.nodes()[node]['has_mutated'] = True
 
     return transmission_tree
@@ -56,7 +54,7 @@ def simulate_mutations(transmission_tree):
 def get_variant_transmission_tree(transmission_tree):
 
     # Simulating variant mutations
-    transmission_tree = simulate_mutations(transmission_tree)
+    transmission_tree = simulate_variant_mutations(transmission_tree)
 
     # Initialising variant names and counter to allow for a new character to be chosen
     variant_characters = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
@@ -81,10 +79,35 @@ def get_variant_transmission_tree(transmission_tree):
     return transmission_tree
 
 
-def get_variant_evolution_graph(variant_graph):
+def save_variant_transmission_data(transmission_tree, out_file):
+
+    # Creating a dataframe to store the results
+    variant_df = pd.DataFrame()
+
+    # Looping through the graph in order of infections
+    for node in list(nx.topological_sort(transmission_tree)):
+
+        # Accessing useful information
+        successors = list(transmission_tree.successors(node))
+        has_mutated, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
+
+        # Creating df entry
+        entry = {'node': node, 'mutation_occurred': has_mutated, 'variant_name': variant_name, 'successors': successors}
+
+        # Adding data to the df
+        variant_df = variant_df._append(entry, ignore_index=True)
+
+    # Writing the dataframe to the outfile
+    variant_df.to_csv(out_file, sep='\t', index=False)
+
+
+##### SIMULATING AND SAVING VARIANT EVOLUTION
+
+def get_variant_evolution_tree(transmission_tree):
 
     # Determining the variant names
-    unique_variants = np.unique([variant_graph.nodes()[node]['variant'] for node in variant_graph.nodes()])
+    all_variants = [transmission_tree.nodes()[node]['variant'] for node in transmission_tree.nodes()]
+    unique_variants = np.unique(all_variants)
 
     # Creating a directed graph
     evolution_graph = nx.DiGraph()
@@ -108,68 +131,67 @@ def get_variant_evolution_graph(variant_graph):
     return evolution_graph
 
 
-##### SAVING AND DISPLAYING THE RESULTS
-
-def save_variant_transmission_data(transmission_tree, out_file_name):
-
-    # Creating a dataframe to store the results
-    variant_df = pd.DataFrame()
-
-    # Looping through the graph in order of infections
-    for node in list(nx.topological_sort(transmission_tree)):
-
-        # Accessing useful information
-        successors = list(transmission_tree.successors(node))
-        has_mutated, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
-
-        # Creating df entry
-        entry = {'node': node, 'mutation_occurred': has_mutated, 'variant_name': variant_name, 'successors': successors}
-
-        # Adding data to the df
-        variant_df = variant_df._append(entry, ignore_index=True)
-
-    # Writing the dataframe to the outfile
-    variant_df.to_csv(out_file_name, sep='\t', index=False)
-
-
-def display_evolutionary_tree(image_name, evolution_tree):
+def save_variant_evolution_figure(evolution_tree, out_file):
 
     # Drawing the graph as an evolutionary tree
     plt.title('Variant evolution for mutation probability=%s' % p_mutation)
     nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True)
-    plt.savefig(image_name)
+    plt.savefig(out_file)
 
 
-##### RUNNING REPEATED SIMULATIONS
+def save_variant_evolution_data(evolution_tree, out_file):
 
-def repeat_measurements(in_file_prefix, out_file_prefix, image_file_prefix, num_iterations=1):
+    # Creating a dataframe to store the results
+    evolution_df = pd.DataFrame()
 
-    # Repeating entire simulation required number of times
+    # Looping through the graph in order of infections
+    for node in list(nx.topological_sort(evolution_tree)):
+
+        # Accessing useful information
+        successors = list(evolution_tree.successors(node))
+
+        # Creating df entry
+        entry = {'node': node, 'successors': successors}
+
+        # Adding data to the df
+        evolution_df = evolution_df._append(entry, ignore_index=True)
+
+    # Writing the dataframe to the outfile
+    evolution_df.to_csv(out_file, sep='\t', index=False)
+
+
+##### RUNNING REPEATED MEASUREMENTS
+
+def repeat_measurements(num_iterations=1):
+
+    # Looping through required number of repeated measurements
     for n in range(num_iterations):
 
-        # Creating the required file names for data flow
-        in_file_name = in_file_prefix + '_%s.txt' % n
-        out_file_name = out_file_prefix + '_%s.txt' % n
-        out_image_name = out_file_prefix + '_%s.png' % n
+        # Initialising the transmission tree without variants
+        in_file_name = in_file_path + '_%s.txt' % n
+        transmission_tree = initialise_transmission_tree(in_file=in_file_name)
 
-        # Importing transmission data and only retaining infection events
-        df = pd.read_csv(in_file_name, delimiter=',', skiprows=1)
-        infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
-
-        # Creating the graph
-        transmission_tree = initialise_tree(infection_df=infection_df)
-
-        # Ending the simulation if produced transmission tree is not directed and acyclic
+        # Checking if the produced transmission tree is directed and acyclic
         if not nx.is_directed_acyclic_graph(transmission_tree):
             print('Error: Transmission tree from file %s is not DAG' % n)
 
-        # Simulating variant transmission and saving the data
+        # Simulating variant mutations across the tree
         variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
-        save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file_name=out_file_name)
 
-        # Creating a graph to show variant evolution and displaying the results
-        variant_evolution_tree = get_variant_evolution_graph(variant_graph=variant_transmission_tree)
-        display_evolutionary_tree(image_name=out_image_name, evolution_tree=variant_evolution_tree)
+        # Saving the results
+        transmission_out_file_name = out_file_path + 'variants_outfile_%s.txt' % n
+        save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file=transmission_out_file_name)
+
+        # Creating a variant evolutionary tree
+        variant_evolution_tree = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
+
+        # Creating file names to save the results to
+        evolution_image_file_name = out_file_path + 'evolution_outfile_%s.jpg' % n
+        evolution_out_file_name = out_file_path + 'evolution_outfile_%s.txt' % n
+
+        # Saving the results
+        save_variant_evolution_figure(evolution_tree=variant_evolution_tree, out_file=evolution_image_file_name)
+        save_variant_evolution_data(evolution_tree=variant_evolution_tree, out_file=evolution_out_file_name)
 
         # Displaying progress
         print(n)
@@ -177,10 +199,8 @@ def repeat_measurements(in_file_prefix, out_file_prefix, image_file_prefix, num_
 
 ##### MAIN
 
-# Filenames for data flow
-in_file = 'simulation_data\\individual_sim_outfile'
-out_file = 'variant_data\\variants_outfile'
-image_file = 'variant_data\\variant_evolution'
+in_file_path = 'simulation_data\\individual_sim_outfile'
+out_file_path = 'variant_data\\'
 
 # Checking if directory containing data exists
 if not os.path.isdir('simulation_data'):
@@ -190,5 +210,5 @@ if not os.path.isdir('simulation_data'):
 if not os.path.isdir('variant_data'):
     os.mkdir('variant_data')
 
-# Running required number of simulations
-repeat_measurements(in_file_prefix=in_file, out_file_prefix=out_file, image_file_prefix=image_file, num_iterations=2)
+# Running repeated measurements
+repeat_measurements(num_iterations=2)
