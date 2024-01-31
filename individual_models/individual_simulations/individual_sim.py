@@ -11,7 +11,7 @@ immune = 'M'
 
 # Epidemiological Parameters
 gamma = 0.1
-sigma = 1
+sigma = 0
 
 
 ##### NETWORK INITIALISATION
@@ -173,13 +173,13 @@ def repeat_simulation(N, I0, t_max, out_file_prefix, num_iterations=1):
 
 ##### ANALYSING AND DISPLAYING DATA
 
-def get_results_dataframe():
+def get_results_dataframe(in_path):
 
     # Creating a dataframe to store all results from all files
     results_df = pd.DataFrame()
 
     # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(out_file)]
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(in_path)]
 
     # Looping through each data file
     for counter, file in enumerate(sim_data_files):
@@ -248,13 +248,13 @@ I0 = 1
 t_max = 100000
 
 # Creating out file name to be used for storing and reading data
-out_file = 'individual_sim_outfile'
+data_path = 'individual_sim_outfile'
 
 # # Repeating the simulation
-repeat_simulation(N=N, I0=I0, t_max=t_max, out_file_prefix=out_file, num_iterations=1)
+repeat_simulation(N=N, I0=I0, t_max=t_max, out_file_prefix=data_path, num_iterations=1)
 
 # Analysing the data
-results_df = get_results_dataframe()
+results_df = get_results_dataframe(in_path=data_path)
 susceptible_df, infected_df, immune_df = get_state_dataframes(results_df=results_df)
 
 # Plotting the data
