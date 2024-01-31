@@ -160,38 +160,59 @@ def save_variant_evolution_data(evolution_tree, out_file):
     evolution_df.to_csv(out_file, sep='\t', index=False)
 
 
-##### RUNNING REPEATED MEASUREMENTS
+##### RUNNING REPEATED SIMULATIONS
 
-def repeat_measurements(num_iterations=1):
+def simulate_variant_transmission(n, input_path, output_path):
+
+    # Initialising the transmission tree without variants
+    infection_df_in_file_name = input_path + '_%s.txt' % n
+    transmission_tree = initialise_transmission_tree(in_file=infection_df_in_file_name)
+
+    # Checking if the produced transmission tree is directed and acyclic
+    if not nx.is_directed_acyclic_graph(transmission_tree):
+        print('Error: Transmission tree from file %s is not DAG' % n)
+
+    # Simulating variant mutations across the tree
+    variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
+
+    # Saving the results
+    transmission_out_file_name = output_path + '\\variants_outfile_%s.txt' % n
+    save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file=transmission_out_file_name)
+
+    return transmission_tree
+
+
+def simulate_variant_evolution(variant_transmission_tree, n, output_path):
+
+    # Creating a variant evolutionary tree
+    variant_evolution_tree = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
+
+    # Creating file names to save the results to
+    evolution_image_file_name = output_path + '\\evolution_outfile_%s.jpg' % n
+    evolution_out_file_name = output_path + '\\evolution_outfile_%s.txt' % n
+
+    # Saving the results
+    save_variant_evolution_figure(evolution_tree=variant_evolution_tree, out_file=evolution_image_file_name)
+    save_variant_evolution_data(evolution_tree=variant_evolution_tree, out_file=evolution_out_file_name)
+
+
+def repeat_measurements(in_path, out_path, num_iterations=1):
 
     # Looping through required number of repeated measurements
     for n in range(num_iterations):
 
-        # Initialising the transmission tree without variants
-        in_file_name = in_file_path + '_%s.txt' % n
-        transmission_tree = initialise_transmission_tree(in_file=in_file_name)
+        # Creating subdirectory path to store current output data in
+        current_output_directory = out_path + '\\variant_simulation_%s' % n
 
-        # Checking if the produced transmission tree is directed and acyclic
-        if not nx.is_directed_acyclic_graph(transmission_tree):
-            print('Error: Transmission tree from file %s is not DAG' % n)
+        # Creating the output subdirectory if it does not already exist
+        if not os.path.isdir(current_output_directory):
+            os.mkdir(current_output_directory)
 
-        # Simulating variant mutations across the tree
-        variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
+        # Completing variant transmission simulation
+        variant_transmission_tree = simulate_variant_transmission(n=n, input_path=in_path, output_path=current_output_directory)
 
-        # Saving the results
-        transmission_out_file_name = out_file_path + 'variants_outfile_%s.txt' % n
-        save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file=transmission_out_file_name)
-
-        # Creating a variant evolutionary tree
-        variant_evolution_tree = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
-
-        # Creating file names to save the results to
-        evolution_image_file_name = out_file_path + 'evolution_outfile_%s.jpg' % n
-        evolution_out_file_name = out_file_path + 'evolution_outfile_%s.txt' % n
-
-        # Saving the results
-        save_variant_evolution_figure(evolution_tree=variant_evolution_tree, out_file=evolution_image_file_name)
-        save_variant_evolution_data(evolution_tree=variant_evolution_tree, out_file=evolution_out_file_name)
+        # Completing variant evolution simulation
+        simulate_variant_evolution(variant_transmission_tree=variant_transmission_tree, n=n, output_path=current_output_directory)
 
         # Displaying progress
         print(n)
@@ -200,15 +221,15 @@ def repeat_measurements(num_iterations=1):
 ##### MAIN
 
 in_file_path = 'simulation_data\\individual_sim_outfile'
-out_file_path = 'variant_data\\'
+out_file_path = 'variant_data'
 
 # Checking if directory containing data exists
 if not os.path.isdir('simulation_data'):
     print('No data found, requires individual simulation data files to be placed in a directory called simulation_data')
 
-# Creating directory to hold new variant data in
-if not os.path.isdir('variant_data'):
-    os.mkdir('variant_data')
+# Creating a directory to store variant data in
+if not os.path.isdir(out_file_path):
+    os.mkdir(out_file_path)
 
 # Running repeated measurements
-repeat_measurements(num_iterations=2)
+repeat_measurements(in_path=in_file_path, out_path=out_file_path, num_iterations=2)
