@@ -4,7 +4,7 @@ from networkx.drawing.nx_agraph import graphviz_layout
 import pandas as pd
 import matplotlib.pyplot as plt
 import string
-
+import os
 
 # Initialising possible infection states
 susceptible = 'S'
@@ -132,32 +132,63 @@ def save_variant_transmission_data(transmission_tree, out_file_name):
     variant_df.to_csv(out_file_name, sep='\t', index=False)
 
 
-def display_evolutionary_tree(evolution_tree):
+def display_evolutionary_tree(image_name, evolution_tree):
 
     # Drawing the graph as an evolutionary tree
     plt.title('Variant evolution for mutation probability=%s' % p_mutation)
     nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True)
-    plt.show()
+    plt.savefig(image_name)
+
+
+##### RUNNING REPEATED SIMULATIONS
+
+def repeat_measurements(in_file_prefix, out_file_prefix, image_file_prefix, num_iterations=1):
+
+    # Repeating entire simulation required number of times
+    for n in range(num_iterations):
+
+        # Creating the required file names for data flow
+        in_file_name = in_file_prefix + '_%s.txt' % n
+        out_file_name = out_file_prefix + '_%s.txt' % n
+        out_image_name = out_file_prefix + '_%s.png' % n
+
+        # Importing transmission data and only retaining infection events
+        df = pd.read_csv(in_file_name, delimiter=',', skiprows=1)
+        infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
+
+        # Creating the graph
+        transmission_tree = initialise_tree(infection_df=infection_df)
+
+        # Ending the simulation if produced transmission tree is not directed and acyclic
+        if not nx.is_directed_acyclic_graph(transmission_tree):
+            print('Error: Transmission tree from file %s is not DAG' % n)
+
+        # Simulating variant transmission and saving the data
+        variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
+        save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file_name=out_file_name)
+
+        # Creating a graph to show variant evolution and displaying the results
+        variant_evolution_tree = get_variant_evolution_graph(variant_graph=variant_transmission_tree)
+        display_evolutionary_tree(image_name=out_image_name, evolution_tree=variant_evolution_tree)
+
+        # Displaying progress
+        print(n)
 
 
 ##### MAIN
 
 # Filenames for data flow
-in_file = 'individual_sim_outfile_0.txt'
-out_file = 'variants_outfile.txt'
+in_file = 'simulation_data\\individual_sim_outfile'
+out_file = 'variant_data\\variants_outfile'
+image_file = 'variant_data\\variant_evolution'
 
-# Importing transmission data and only retaining infection events
-df = pd.read_csv(in_file, delimiter=',', skiprows=1)
-infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
+# Checking if directory containing data exists
+if not os.path.isdir('simulation_data'):
+    print('No data found, requires individual simulation data files to be placed in a directory called simulation_data')
 
-# Creating the graph and checking it is directed and acyclic
-transmission_tree = initialise_tree(infection_df=infection_df)
-print('Transmission Tree is DAG: %s' % nx.is_directed_acyclic_graph(transmission_tree))
+# Creating directory to hold new variant data in
+if not os.path.isdir('variant_data'):
+    os.mkdir('variant_data')
 
-# Simulating variant transmission and saving the data
-variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
-save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file_name=out_file)
-
-# Creating a graph to show variant evolution and displaying the results
-variant_evolution_tree = get_variant_evolution_graph(variant_graph=variant_transmission_tree)
-display_evolutionary_tree(evolution_tree=variant_evolution_tree)
+# Running required number of simulations
+repeat_measurements(in_file_prefix=in_file, out_file_prefix=out_file, image_file_prefix=image_file, num_iterations=2)
