@@ -12,7 +12,7 @@ infected = 'I'
 immune = 'M'
 
 # Setting a mutation rate
-p_mutation = 0.3
+p_mutation = 0.1
 
 
 ##### INITIALISING THE TRANSMISSION TREE
@@ -31,8 +31,12 @@ def initialise_transmission_tree(in_file):
         transmission_tree.add_edge(infection_df['source_label'][ind], infection_df['target_label'][ind])
 
     # Adding attributes to each node
-    attributes = {'has_mutated': False, 'variant': 'a'}
+    attributes = {'has_mutated': False, 'variant': ''}
     nx.set_node_attributes(transmission_tree, {node: attributes for node in transmission_tree.nodes})
+
+    # Accessing the node that caused the first infection and giving it variant 'a'
+    topological_list = list(nx.topological_sort(transmission_tree))
+    transmission_tree.nodes()[topological_list[0]]['variant'] = 'a'
 
     return transmission_tree
 
@@ -41,8 +45,8 @@ def initialise_transmission_tree(in_file):
 
 def simulate_variant_mutations(transmission_tree):
 
-    # Looping through each node in the graph
-    for node in transmission_tree.nodes():
+    # Looping in order of infections but skipping the first (mutations are assumed to occur from the second infection)
+    for node in list(nx.topological_sort(transmission_tree))[1:]:
 
         # Checking if a mutation occurs at the point of the node
         if np.random.uniform() < p_mutation:
@@ -92,7 +96,7 @@ def save_variant_transmission_data(transmission_tree, out_file):
         has_mutated, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
 
         # Creating df entry
-        entry = {'node': node, 'mutation_occurred': has_mutated, 'variant_name': variant_name, 'successors': successors}
+        entry = {'node': node, 'mutation_occurred': has_mutated, 'infected_by': variant_name, 'successors': successors}
 
         # Adding data to the df
         variant_df = variant_df._append(entry, ignore_index=True)
@@ -105,12 +109,13 @@ def save_variant_transmission_data(transmission_tree, out_file):
 
 def get_variant_evolution_tree(transmission_tree):
 
-    # Determining the variant names
-    all_variants = [transmission_tree.nodes()[node]['variant'] for node in transmission_tree.nodes()]
-    unique_variants = np.unique(all_variants)
-
-    # Creating a directed graph
+    # Creating a directed graph and determining the possible variants
     evolution_graph = nx.DiGraph()
+    all_variants = [transmission_tree.nodes()[node]['variant'] for node in transmission_tree.nodes()]
+
+    # Determining the unique variant names and indexing into original order (np.unique does not conserve order)
+    unique_unsorted_variants, original_locations = np.unique(all_variants, return_index=True)
+    unique_variants = unique_unsorted_variants[np.argsort(original_locations)]
 
     # Looping through each unique variant in the dataset
     for variant in unique_variants:
@@ -128,18 +133,19 @@ def get_variant_evolution_tree(transmission_tree):
     variant_label_dict = dict(zip(unique_variants, np.arange(len(unique_variants))))
     evolution_graph = nx.relabel_nodes(evolution_graph, variant_label_dict)
 
-    return evolution_graph
+    return evolution_graph, variant_label_dict
 
 
-def save_variant_evolution_figure(evolution_tree, out_file):
+def save_variant_evolution_figure(evolution_tree, variant_dict, out_file):
 
     # Drawing the graph as an evolutionary tree
+    fig, ax = plt.subplots(figsize=(20, 10))
     plt.title('Variant evolution for mutation probability=%s' % p_mutation)
-    nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True)
+    nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True, ax=ax)
     plt.savefig(out_file)
 
 
-def save_variant_evolution_data(evolution_tree, out_file):
+def save_variant_evolution_data(evolution_tree, variant_dict, out_file):
 
     # Creating a dataframe to store the results
     evolution_df = pd.DataFrame()
@@ -147,11 +153,15 @@ def save_variant_evolution_data(evolution_tree, out_file):
     # Looping through the graph in order of infections
     for node in list(nx.topological_sort(evolution_tree)):
 
-        # Accessing useful information
+        # Determining variant name
+        variant_name = [key for key, value in variant_dict.items() if value == node]
+
+        # Accessing connected node information
+        ancestors = list(nx.ancestors(evolution_tree, node))
         successors = list(evolution_tree.successors(node))
 
         # Creating df entry
-        entry = {'node': node, 'successors': successors}
+        entry = {'node': node, 'variant_name': variant_name, 'num_mutations': len(ancestors), 'ancestors': ancestors, 'successors': successors}
 
         # Adding data to the df
         evolution_df = evolution_df._append(entry, ignore_index=True)
@@ -185,15 +195,15 @@ def simulate_variant_transmission(n, input_path, output_path):
 def simulate_variant_evolution(variant_transmission_tree, n, output_path):
 
     # Creating a variant evolutionary tree
-    variant_evolution_tree = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
+    variant_evolution_tree, variant_dict = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
 
     # Creating file names to save the results to
-    evolution_image_file_name = output_path + '\\evolution_outfile_%s.jpg' % n
-    evolution_out_file_name = output_path + '\\evolution_outfile_%s.txt' % n
+    image_name = output_path + '\\evolution_image_%s.jpg' % n
+    file_name = output_path + '\\evolution_outfile_%s.txt' % n
 
     # Saving the results
-    save_variant_evolution_figure(evolution_tree=variant_evolution_tree, out_file=evolution_image_file_name)
-    save_variant_evolution_data(evolution_tree=variant_evolution_tree, out_file=evolution_out_file_name)
+    save_variant_evolution_figure(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, out_file=image_name)
+    save_variant_evolution_data(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, out_file=file_name)
 
 
 def repeat_measurements(in_path, out_path, num_iterations=1):
