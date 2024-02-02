@@ -161,7 +161,7 @@ def repeat_simulation(N, I0, t_max, out_file_prefix, num_iterations=1):
     for n in range(num_iterations):
 
         # Creating a new outfile name
-        current_file_name = out_file_prefix + '_%s.txt' % n
+        current_file_name = out_file_prefix + '_%s.txt' % (n + 1)
 
         # Initialising the simulation
         G = initialise_graph(n_nodes=N)
@@ -250,7 +250,7 @@ t_max = 100000
 # Creating out file name to be used for storing and reading data
 data_path = 'individual_sim_outfile'
 
-# # Repeating the simulation
+# Repeating the simulation
 repeat_simulation(N=N, I0=I0, t_max=t_max, out_file_prefix=data_path, num_iterations=1)
 
 # Analysing the data
