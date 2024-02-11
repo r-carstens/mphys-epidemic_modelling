@@ -209,7 +209,7 @@ def simulate_variant_evolution(variant_transmission_tree, n, output_path):
 def repeat_measurements(in_path, out_path, num_iterations=1):
 
     # Looping through required number of repeated measurements
-    for n in range(num_iterations):
+    for n in range(1, num_iterations+1):
 
         # Creating subdirectory path to store current output data in
         current_output_directory = out_path + '\\variant_simulation_%s' % n
