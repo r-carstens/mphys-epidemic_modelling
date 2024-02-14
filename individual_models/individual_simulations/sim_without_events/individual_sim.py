@@ -260,14 +260,3 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df=results
 # Plotting the data
 plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df)
 
-
-
-
-
-
-
-
-
-
-
-
