@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
+##### GLOBAL CONSTANTS
+
 # Simulation constants
 N = 100
 I0 = 1
@@ -31,6 +33,7 @@ kappa = 0.0001               # shock frequency
 
 
 ##### NETWORK INITIALISATION
+
 def get_mosquito_transmission():
     a = np.random.uniform(low=0.1, high=2)   # rate at which a human is bitten by a mosquito
     b = np.random.uniform(low=0.1, high=1)   # proportion of infected bites that cause infection in the human host
