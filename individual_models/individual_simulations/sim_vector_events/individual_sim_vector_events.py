@@ -293,6 +293,8 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, event_times):
     plt.savefig('population_results.png')
 
 
+##### MAIN
+
 # Creating out file name to be used for storing and reading data
 data_path = 'individual_sim_vector_events_outfile'
 
