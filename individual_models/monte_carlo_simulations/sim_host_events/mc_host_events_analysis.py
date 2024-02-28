@@ -1,6 +1,6 @@
 # Creating out file names to be used for storing and reading data
 event_path = 'event_outfile'
-MCS_path = 'MCS_outfile'
+mcs_path = 'mcs_outfile'
 complete_path = 'complete_outfile'
 
 

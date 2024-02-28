@@ -33,7 +33,7 @@ N_star = N
 
 # Creating out file names to be used for storing and reading data
 event_path = 'event_outfile'
-MCS_path = 'MCS_outfile'
+mcs_path = 'mcs_outfile'
 complete_path = 'complete_outfile'
 
 
@@ -250,9 +250,9 @@ def get_state_totals(G):
 def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
 
     # Creating a file to store MCS data to
-    MCS_outfile = open(MCS_path + '_%s.txt' % (iter_num + 1), 'w')
-    MCS_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    MCS_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
+    mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
+    mcs_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
     
     # Creating a file to store totals to
     complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
@@ -284,7 +284,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
             S_total, I_total, M_total = get_state_totals(G)
     
             # # Logging step results
-            MCS_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            mcs_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
             t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_new_births, n_new_deaths, n_alive, n_dead))
 
         # Logging total results
@@ -292,7 +292,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
         t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_new_births, n_new_deaths, n_alive, n_dead))
         
     # Closing the data files
-    MCS_outfile.close()
+    mcs_outfile.close()
     complete_outfile.close()
 
 
