@@ -2,23 +2,23 @@ import os
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-import pandas as pd
+from tqdm import tqdm
 
-
-##### GLOBAL CONSTANTS
-
-# Simulation constants
-N = 100
-I0 = 1
-
-# Time constants
-t_max, dt = 1000, 0.2
-t_range = np.arange(start=0, stop=t_max, step=dt)
+# Creating out file names to be used for storing and reading data
+event_path = 'vector_event_outfile'
+mcs_path = 'mcs_vector_event_data'
+complete_path = 'complete_vector_event_data'
 
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
 immune = 'M'
+
+# Setting simulation data
+N = 1000
+I0 = 1
+t_max = 100
+dt = 0.2
 
 # Epidemiological Parameters
 gamma = 0.1
@@ -29,7 +29,7 @@ baseline_transmission = 0.4  # setting the baseline mosquito transmission probab
 lam = 0.07                   # noise element of death rate evolution
 nu = 1.0                     # death rate reversion to baseline rate
 omega = 0.5                  # size of shock
-kappa = 0.0001               # shock frequency
+kappa = 0.002                # shock frequency
 
 
 ##### NETWORK INITIALISATION
@@ -103,7 +103,7 @@ def get_event_impact(sim_time, event_times, baseline_rate):
     return event_impact
 
 
-##### RUNNING THE SIMULATION
+##### SIMULATING DISEASE TRANSMISSION
 
 def check_for_infection(G, source_label, target_label, event_impact, reinfection):
 
@@ -170,155 +170,77 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation_iteration(G, n_nodes, I0, event_impact, sim_time, out_file_name):
+def run_simulation_iteration(G, n_nodes, I0, event_impact, sim_time, iter_num):
 
     # Creating a file to store the results to
-    infection_outfile = open(out_file_name, 'w')
-    infection_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    infection_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
+    mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
+    mcs_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
-    for t in range(sim_time):
+    # Creating a file to store the results to
+    complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
+    complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    complete_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
-        # Determining the current mosquito transmission potential
-        current_event_impact = event_impact[t]
+    # Looping through timesteps
+    for t in tqdm(range(sim_time)):
+        
+        # Looping through node totals
+        for n in range(G.number_of_nodes()):
 
-        # Completing an iteration step
-        G, source_label, target_label, source_during, target_before, target_after = complete_step(G, event_impact=current_event_impact)
+            # Determining the current mosquito transmission potential
+            current_event_impact = event_impact[t]
+    
+            # Completing an iteration step
+            G, source_label, target_label, source_during, target_before, target_after = complete_step(G, event_impact=current_event_impact)
+    
+            # Updating network if required
+            if target_before != target_after:
+                G.nodes()[target_label]['state'] = target_after
+    
+            # Counting the number of individuals in each state
+            S_total, I_total, M_total = get_state_totals(G)
+    
+            # Logging MCS results
+            mcs_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
-        # Updating network if required
-        if target_before != target_after:
-            G.nodes()[target_label]['state'] = target_after
-
-        # Counting the number of individuals in each state
-        S_total, I_total, M_total = get_state_totals(G)
-
-        # Logging the results
-        infection_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+        # Logging totals result
+        complete_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
         t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
-        # Displaying the progress
-        if t % 1000 == 0:
-            print(t)
-
-    # Closing the file
-    infection_outfile.close()
+    # Closing the data files
+    mcs_outfile.close()
+    complete_outfile.close()
 
 
-def repeat_simulation(N, I0, sim_time, event_impact, out_file_prefix, num_iterations=1):
+def repeat_simulation(N, I0, t_max, num_iterations=1):
+
+    # Simulating when catastrophic events will occur
+    event_times = get_event_times(sim_time=t_max)
+    event_impact = get_event_impact(sim_time=t_max, event_times=event_times, baseline_rate=baseline_transmission)
+
+    # Creating file to write catastrophic event data to
+    with open(event_path + '.txt', 'w') as event_outfile:
+        event_outfile.write('event_occurred,event_impact')
+
+        # Writing catastrophic event data
+        for event_data in list(zip(event_times, event_impact)):
+            event_outfile.write('\n%s,%s' % (event_data))
 
     # Repeating entire simulation required number of times
     for n in range(num_iterations):
-
-        # Creating a new outfile name
-        current_file_name = out_file_prefix + '_%s.txt' % (n + 1)
 
         # Initialising the simulation
         G = initialise_graph(n_nodes=N)
         G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
         # Running the simulation
-        run_simulation_iteration(G, n_nodes=N, I0=I0, event_impact=event_impact, sim_time=sim_time, out_file_name=current_file_name)
-
-
-##### ANALYSING AND DISPLAYING DATA
-
-def get_results_dataframe(in_path):
-
-    # Creating a dataframe to store all results from all files
-    results_df = pd.DataFrame()
-
-    # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(in_path)]
-
-    # Looping through each data file
-    for counter, file in enumerate(sim_data_files):
-
-        # Reading in the data
-        current_df = pd.read_csv(file, delimiter=',', skiprows=1)
-
-        # Changing column names to match their origin file (i.e. 'column_name_number')
-        new_col_names = [current_df.columns[0]] + [col_name + '_%s' % counter for col_name in current_df.columns[1:]]
-        current_df.columns = new_col_names
-
-        # Concatenating the current results to the results dataframe
-        results_df = pd.concat([results_df, current_df], axis=1)
-
-    return results_df
-
-
-def get_state_dataframes(results_df):
-
-    # Extracting the state data
-    susceptible_df = results_df.filter(regex='S_total')
-    infected_df = results_df.filter(regex='I_total')
-    immune_df = results_df.filter(regex='M_total')
-
-    # Adding mean data
-    susceptible_df = susceptible_df.assign(S_total_mean=susceptible_df.mean(axis=1))
-    infected_df = infected_df.assign(I_total_mean=infected_df.mean(axis=1))
-    immune_df = immune_df.assign(M_total_mean=immune_df.mean(axis=1))
-
-    return susceptible_df, infected_df, immune_df
-
-
-def plot_state_totals(susceptible_df, infected_df, immune_df, event_times):
-
-    # Creating a list of the dataframes
-    all_state_dfs = susceptible_df, infected_df, immune_df
-
-    # Creating a list for legend labels and plot colors
-    labels = ['Susceptible', 'Infectious', 'Immune']
-    colors = ['navy', 'firebrick', 'g']
-
-    # Initialising a figure
-    fig, ax = plt.subplots()
-
-    # Looping through the remaining results
-    for counter, df in enumerate(all_state_dfs):
-
-        # Plotting the rough data with transparent lines
-        df[df.columns[:-1]].plot(ax=ax, alpha=0.1, color=colors[counter], legend=False)
-
-        # Plotting the mean data with a solid line
-        df[df.columns[-1]].plot(ax=ax, color=colors[counter], linewidth=2, label=labels[counter], legend=True)
-
-    # Over-plotting event times
-    for t, is_event_time in enumerate(event_times):
-
-        # Plotting event if required
-        if is_event_time:
-            plt.vlines(x=t, ymin=0, ymax=N, linestyles='dashed')
-
-    # Adding plot titles and legend
-    plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (gamma, sigma))
-    plt.xlabel('Time (days)')
-    plt.ylabel('Population sizes')
-    plt.savefig('population_results.png')
+        run_simulation_iteration(G, n_nodes=N, I0=I0, event_impact=event_impact, sim_time=t_max, iter_num=n)
 
 
 ##### MAIN
 
-# Creating out file name to be used for storing and reading data
-data_path = 'individual_sim_vector_events_outfile'
-
-# Determining the catastrophic event impact
-event_times = get_event_times(sim_time=t_max)
-event_impact = get_event_impact(sim_time=t_max, event_times=event_times, baseline_rate=baseline_transmission)
-
-# Displaying the resulting event impacts
-plt.title('Impact on mosquito transmission probability \nfor shock frequency=%s and shock impact=%s' % (kappa, omega))
-plt.xlabel('Time')
-plt.ylabel('Mosquito transmission probability')
-plt.plot(event_impact)
-plt.savefig('event_impact.png')
-
 # Repeating the simulation for a required number of iterations
 n_iterations = 1
-repeat_simulation(N=N, I0=I0, sim_time=t_max, event_impact=event_impact, out_file_prefix=data_path, num_iterations=n_iterations)
-
-# Analysing the data
-results_df = get_results_dataframe(in_path=data_path)
-susceptible_df, infected_df, immune_df = get_state_dataframes(results_df=results_df)
-
-# Plotting the data
-plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df, event_times=event_times)
+repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
