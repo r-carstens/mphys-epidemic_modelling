@@ -251,12 +251,12 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
 
     # Creating a file to store MCS data to
     mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
-    mcs_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    mcs_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
     mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
     
     # Creating a file to store totals to
     complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
-    complete_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
     complete_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
 
     # Looping through timesteps

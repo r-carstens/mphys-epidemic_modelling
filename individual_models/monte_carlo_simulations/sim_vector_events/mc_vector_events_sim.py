@@ -174,7 +174,7 @@ def run_simulation_iteration(G, n_nodes, I0, event_impact, sim_time, out_file_na
 
     # Creating a file to store the results to
     infection_outfile = open(out_file_name, 'w')
-    infection_outfile.write('N=%s, I0=%s, t_max=%s, gamma=%s, sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    infection_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
     infection_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
     for t in range(sim_time):
