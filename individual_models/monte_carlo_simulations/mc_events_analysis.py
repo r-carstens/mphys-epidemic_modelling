@@ -1,11 +1,41 @@
+# Making the required imports
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 # Creating out file names to be used for storing and reading data
-event_path = 'event_outfile'
-mcs_path = 'mcs_outfile'
-complete_path = 'complete_outfile'
+event_path = 'host_event_outfile'
+mcs_path = 'mcs_host_event_data'
+complete_path = 'complete_host_event_data'
 
 
 ##### CREATING USEFUL DATAFRAMES
 
+def get_simulation_parameters(path):
+
+    # Creating a structure to store the simulation parameters
+    parameters_dict = dict()
+
+    # Locating all data files within the directory
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(path)]
+
+    # Opening the first file (all simulation repeats have the same basic parameters)
+    with open(sim_data_files[0], 'r') as in_file:
+
+        # Reading first line
+        data = in_file.readline().strip().split(',')
+
+    # Looping through tuples of the form (parameter_name, value)
+    for parameter_data in [parameter.split('=') for parameter in data]:
+        
+        # Storing the name and value
+        parameter_name, parameter_value = parameter_data
+        parameters_dict[parameter_name] = float(parameter_value)
+
+    return parameters_dict
+    
+    
 def get_events_dataframe(path):
 
     # Reading in the data
@@ -55,7 +85,7 @@ def get_state_dataframes(results_df):
 
 ##### PLOTTING THE RESULTS
 
-def plot_state_totals(susceptible_df, infected_df, immune_df, events_df):
+def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters):
 
     # Creating a list of the dataframes
     all_state_dfs = susceptible_df, infected_df, immune_df
@@ -84,7 +114,7 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df):
             plt.vlines(x=t, ymin=0, ymax=N, linestyles='dashed')
     
     # Adding plot titles and legend
-    plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (gamma, sigma))
+    plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
     plt.xlabel('Time (days)')
     plt.ylabel('Population sizes')
     plt.show()
@@ -92,10 +122,13 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df):
 
 ##### MAIN
 
-# Analysing the data
+# Accessing the simulation parameters
+parameters_dict = get_simulation_parameters(path=complete_path)
+
+# Creating useful dataframes
 events_df = get_events_dataframe(path=event_path)
 results_df = get_results_dataframe(path=complete_path)
 susceptible_df, infected_df, immune_df = get_state_dataframes(results_df=results_df)
 
 # Plotting the data
-plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df, events_df=events_df)
+plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df, events_df=events_df, parameters=parameters_dict)

@@ -6,6 +6,11 @@ import pandas as pd
 from tqdm import tqdm
 
 
+# Creating out file names to be used for storing and reading data
+event_path = 'host_event_outfile'
+mcs_path = 'mcs_host_event_data'
+complete_path = 'complete_host_event_data'
+
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
@@ -30,11 +35,6 @@ nu = 1.0          # death rate reversion to baseline rate
 omega = 0.2       # size of shock
 kappa = 0.002       # shock frequency
 N_star = N
-
-# Creating out file names to be used for storing and reading data
-event_path = 'event_outfile'
-mcs_path = 'mcs_outfile'
-complete_path = 'complete_outfile'
 
 
 ##### NETWORK INITIALISATION
