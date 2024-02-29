@@ -4,7 +4,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-
 # Creating out file names to be used for storing and reading data
 mcs_path = 'mcs_without_events'
 complete_path = 'complete_without_events'

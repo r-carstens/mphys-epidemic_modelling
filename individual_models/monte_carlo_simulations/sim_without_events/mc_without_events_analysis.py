@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
 # Creating out file names to be used for storing and reading data
 mcs_path = 'mcs_without_events'
 complete_path = 'complete_without_events'

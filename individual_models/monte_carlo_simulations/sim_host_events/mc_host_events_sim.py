@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 
-
 # Creating out file names to be used for storing and reading data
 event_path = 'host_event_outfile'
 mcs_path = 'mcs_host_event_data'

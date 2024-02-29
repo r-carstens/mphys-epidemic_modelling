@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
 # Creating out file names to be used for storing and reading data
 event_path = 'host_event_outfile'
 mcs_path = 'mcs_host_event_data'
