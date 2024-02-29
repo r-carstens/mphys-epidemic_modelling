@@ -1,6 +1,7 @@
 import numpy as np
 import networkx as nx
 from networkx.drawing.nx_agraph import graphviz_layout
+from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
 import string
@@ -17,8 +18,11 @@ immune = 'M'
 # Setting a mutation rate
 p_mutation = 0.3
 
+# Setting required number of mutations for new variant
+req_n_mutations = 3
 
-##### ANALYSING VARIANT TRANSMISSION
+
+##### ANALYSING MUTATIONS
 
 def initialise_transmission_tree(iter_num):
 
@@ -37,19 +41,20 @@ def initialise_transmission_tree(iter_num):
         transmission_tree.add_edge(infection_df['source_label'][ind], infection_df['target_label'][ind])
 
     # Adding attributes to each node
-    attributes = {'has_mutated': False, 'variant': ''}
+    attributes = {'has_mutated': False, 'strain': '', 'variant': ''}
     nx.set_node_attributes(transmission_tree, {node: attributes for node in transmission_tree.nodes})
 
     # Accessing the node that caused the first infection and giving it variant 'a'
     topological_list = list(nx.topological_sort(transmission_tree))
+    transmission_tree.nodes()[topological_list[0]]['strain'] = 'a'
     transmission_tree.nodes()[topological_list[0]]['variant'] = 'a'
 
     return transmission_tree
     
 
-def simulate_variant_mutations(transmission_tree):
+def simulate_mutations(transmission_tree):
 
-    # Looping in order of infections but skipping the first (mutations are assumed to occur from the second infection)
+    # Looping in order of infections but skipping the first (mutations are assumed to occur from the second infection as first is wild type)
     for node in list(nx.topological_sort(transmission_tree))[1:]:
 
         # Checking if a mutation occurs at the point of the node
@@ -59,13 +64,10 @@ def simulate_variant_mutations(transmission_tree):
     return transmission_tree
 
 
-def get_variant_transmission_tree(transmission_tree):
+def simulate_strains(transmission_tree):
 
-    # Simulating variant mutations
-    transmission_tree = simulate_variant_mutations(transmission_tree)
-
-    # Initialising variant names and counter to allow for a new character to be chosen
-    variant_characters = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
+    # Initialising strain names and counter to allow for a new character to be chosen
+    strain_characters = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
     mutation_counter = 0
 
     # Looping through the graph in order of infections
@@ -74,19 +76,60 @@ def get_variant_transmission_tree(transmission_tree):
         # Checking if a mutation has occurred within the current node
         if transmission_tree.nodes()[node]['has_mutated']:
 
-            # Updating current node's variant name if required
-            transmission_tree.nodes()[node]['variant'] += '_' + variant_characters[mutation_counter]
+            # Updating current node's strain name if required
+            transmission_tree.nodes()[node]['strain'] += '_' + strain_characters[mutation_counter]
             mutation_counter += 1
 
         # Looping through the nodes directly infected by the current node
         for successor in list(transmission_tree.successors(node)):
 
-            # Infecting immediate successors with the current node's variant
-            transmission_tree.nodes()[successor]['variant'] = transmission_tree.nodes()[node]['variant']
+            # Infecting immediate successors with the current node's strain
+            transmission_tree.nodes()[successor]['strain'] = transmission_tree.nodes()[node]['strain']
 
     return transmission_tree
 
 
+def simulate_variants(transmission_tree):
+
+    # Looping through the graph in order of infections
+    for node in list(nx.topological_sort(transmission_tree)):
+        
+        # Splitting the current strain mutations
+        mutations = transmission_tree.nodes()[node]['strain'].split('_')
+
+        # Checking if a variant emerges
+        if len(mutations) >= req_n_mutations:
+
+            # Creating a variable to store the newly emerged variant
+            new_variant = ''
+            
+            # Determining the number of mutation clusters
+            num_mutation_clusters = len(mutations) // req_n_mutations
+
+            # Looping through each cluster
+            for i in range(num_mutation_clusters):
+
+                # Creating an array containing mutation clusters and adding each cluster to variant name
+                current_cluster = mutations[i * req_n_mutations : (i + 1) * req_n_mutations]
+                new_variant += ''.join(current_cluster)
+
+            # Checking for remaining mutations
+            if len(mutations) % req_n_mutations != 0:
+
+                # Adding remaining mutations to variant name
+                new_variant += '_'
+                new_variant += '_'.join(mutations[num_mutation_clusters * req_n_mutations:])
+
+            # Updating host node's variant
+            transmission_tree.nodes()[node]['variant'] = new_variant
+
+        # Looping through the nodes directly infected by the current node
+        for successor in list(transmission_tree.successors(node)):
+
+            # Infecting immediate successors with the current node's strain
+            transmission_tree.nodes()[successor]['variant'] = transmission_tree.nodes()[node]['variant']
+            
+        
 def save_variant_transmission_data(transmission_tree, iter_num):
 
     # Creating a dataframe to store the results
@@ -97,10 +140,10 @@ def save_variant_transmission_data(transmission_tree, iter_num):
 
         # Accessing useful information
         successors = list(transmission_tree.successors(node))
-        has_mutated, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
+        has_mutated, strain_name, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
 
         # Creating df entry
-        entry = {'node': node, 'mutation_occurred': has_mutated, 'infected_by': variant_name, 'successors': successors}
+        entry = {'node': node, 'mutation_occurred': has_mutated, 'strain_infected_by': strain_name, 'variant_infected_by': variant_name, 'successors': successors}
 
         # Adding data to the df
         variant_df = variant_df._append(entry, ignore_index=True)
@@ -115,20 +158,26 @@ def analyse_variant_transmission(iter_num):
     # Initialising the transmission tree without variants
     transmission_tree = initialise_transmission_tree(iter_num=iter_num)
 
+    # Simulating variant mutations
+    transmission_tree = simulate_mutations(transmission_tree)
+
+    # Simulating strain transmission
+    transmission_tree = simulate_strains(transmission_tree)
+
+    # Simulating variant transmission
+    simulate_variants(transmission_tree)
+
     # Checking if the produced transmission tree is directed and acyclic
     if not nx.is_directed_acyclic_graph(transmission_tree):
         print('Error: Transmission tree from file %s is not DAG' % iter_num)
 
-    # Simulating variant mutations across the tree
-    variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
-
     # Saving the results
-    save_variant_transmission_data(transmission_tree=variant_transmission_tree, iter_num=iter_num)
+    save_variant_transmission_data(transmission_tree, iter_num=iter_num)
 
     return transmission_tree
 
 
-##### SIMULATING AND SAVING VARIANT EVOLUTION
+##### ANALYSING VARIANT EVOLUTION
 
 def get_variant_evolution_tree(transmission_tree):
 
@@ -207,7 +256,7 @@ def simulate_variant_evolution(variant_transmission_tree, iter_num):
 def repeat_measurements(num_iterations=1):
 
     # Looping through required number of repeated measurements
-    for n in range(num_iterations):
+    for n in tqdm(range(num_iterations)):
 
         # Completing variant transmission simulation
         variant_transmission_tree = analyse_variant_transmission(iter_num=n)
