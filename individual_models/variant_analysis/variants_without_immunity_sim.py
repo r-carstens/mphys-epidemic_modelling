@@ -128,6 +128,8 @@ def simulate_variants(transmission_tree):
 
             # Infecting immediate successors with the current node's strain
             transmission_tree.nodes()[successor]['variant'] = transmission_tree.nodes()[node]['variant']
+
+    return transmission_tree
             
         
 def save_variant_transmission_data(transmission_tree, iter_num):
@@ -165,7 +167,7 @@ def analyse_variant_transmission(iter_num):
     transmission_tree = simulate_strains(transmission_tree)
 
     # Simulating variant transmission
-    simulate_variants(transmission_tree)
+    transmission_tree = simulate_variants(transmission_tree)
 
     # Checking if the produced transmission tree is directed and acyclic
     if not nx.is_directed_acyclic_graph(transmission_tree):
