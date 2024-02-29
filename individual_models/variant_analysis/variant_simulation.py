@@ -6,19 +6,25 @@ import matplotlib.pyplot as plt
 import string
 import os
 
+# Setting input filename
+complete_path = 'complete_without_events'
+
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
 immune = 'M'
 
 # Setting a mutation rate
-p_mutation = 0.1
+p_mutation = 0.3
 
 
-##### INITIALISING THE TRANSMISSION TREE
+##### ANALYSING VARIANT TRANSMISSION
 
-def initialise_transmission_tree(in_file):
+def initialise_transmission_tree(iter_num):
 
+    # Determining input file name
+    in_file = complete_path + '_%s.txt' % (iter_num + 1)
+    
     # Importing transmission data and only retaining infection events
     df = pd.read_csv(in_file, delimiter=',', skiprows=1)
     infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'] == susceptible) & (df['target_after'] == infected)]
@@ -39,9 +45,7 @@ def initialise_transmission_tree(in_file):
     transmission_tree.nodes()[topological_list[0]]['variant'] = 'a'
 
     return transmission_tree
-
-
-##### SIMULATING AND SAVING VARIANT TRANSMISSION THROUGHOUT THE POPULATION
+    
 
 def simulate_variant_mutations(transmission_tree):
 
@@ -83,7 +87,7 @@ def get_variant_transmission_tree(transmission_tree):
     return transmission_tree
 
 
-def save_variant_transmission_data(transmission_tree, out_file):
+def save_variant_transmission_data(transmission_tree, iter_num):
 
     # Creating a dataframe to store the results
     variant_df = pd.DataFrame()
@@ -102,7 +106,26 @@ def save_variant_transmission_data(transmission_tree, out_file):
         variant_df = variant_df._append(entry, ignore_index=True)
 
     # Writing the dataframe to the outfile
+    out_file = 'variants_outfile_%s.txt' % (iter_num + 1)
     variant_df.to_csv(out_file, sep='\t', index=False)
+
+
+def analyse_variant_transmission(iter_num):
+
+    # Initialising the transmission tree without variants
+    transmission_tree = initialise_transmission_tree(iter_num=iter_num)
+
+    # Checking if the produced transmission tree is directed and acyclic
+    if not nx.is_directed_acyclic_graph(transmission_tree):
+        print('Error: Transmission tree from file %s is not DAG' % iter_num)
+
+    # Simulating variant mutations across the tree
+    variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
+
+    # Saving the results
+    save_variant_transmission_data(transmission_tree=variant_transmission_tree, iter_num=iter_num)
+
+    return transmission_tree
 
 
 ##### SIMULATING AND SAVING VARIANT EVOLUTION
@@ -136,16 +159,16 @@ def get_variant_evolution_tree(transmission_tree):
     return evolution_graph, variant_label_dict
 
 
-def save_variant_evolution_figure(evolution_tree, variant_dict, out_file):
+def save_variant_evolution_figure(evolution_tree, variant_dict, iter_num):
 
     # Drawing the graph as an evolutionary tree
     fig, ax = plt.subplots(figsize=(20, 10))
     plt.title('Variant evolution for mutation probability=%s' % p_mutation)
     nx.draw(evolution_tree, pos=graphviz_layout(evolution_tree, prog='dot'), with_labels=True, ax=ax)
-    plt.savefig(out_file)
+    plt.savefig('evolution_image_%s.jpg' % (iter_num + 1))
 
 
-def save_variant_evolution_data(evolution_tree, variant_dict, out_file):
+def save_variant_evolution_data(evolution_tree, variant_dict, iter_num):
 
     # Creating a dataframe to store the results
     evolution_df = pd.DataFrame()
@@ -167,79 +190,36 @@ def save_variant_evolution_data(evolution_tree, variant_dict, out_file):
         evolution_df = evolution_df._append(entry, ignore_index=True)
 
     # Writing the dataframe to the outfile
+    out_file = 'evolution_outfile_%s.txt' % (iter_num + 1)
     evolution_df.to_csv(out_file, sep='\t', index=False)
 
 
-##### RUNNING REPEATED SIMULATIONS
-
-def simulate_variant_transmission(n, input_path, output_path):
-
-    # Initialising the transmission tree without variants
-    infection_df_in_file_name = input_path + '_%s.txt' % n
-    transmission_tree = initialise_transmission_tree(in_file=infection_df_in_file_name)
-
-    # Checking if the produced transmission tree is directed and acyclic
-    if not nx.is_directed_acyclic_graph(transmission_tree):
-        print('Error: Transmission tree from file %s is not DAG' % n)
-
-    # Simulating variant mutations across the tree
-    variant_transmission_tree = get_variant_transmission_tree(transmission_tree=transmission_tree)
-
-    # Saving the results
-    transmission_out_file_name = output_path + '\\variants_outfile_%s.txt' % n
-    save_variant_transmission_data(transmission_tree=variant_transmission_tree, out_file=transmission_out_file_name)
-
-    return transmission_tree
-
-
-def simulate_variant_evolution(variant_transmission_tree, n, output_path):
+def simulate_variant_evolution(variant_transmission_tree, iter_num):
 
     # Creating a variant evolutionary tree
     variant_evolution_tree, variant_dict = get_variant_evolution_tree(transmission_tree=variant_transmission_tree)
 
-    # Creating file names to save the results to
-    image_name = output_path + '\\evolution_image_%s.jpg' % n
-    file_name = output_path + '\\evolution_outfile_%s.txt' % n
-
     # Saving the results
-    save_variant_evolution_figure(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, out_file=image_name)
-    save_variant_evolution_data(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, out_file=file_name)
+    save_variant_evolution_figure(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, iter_num=iter_num)
+    save_variant_evolution_data(evolution_tree=variant_evolution_tree, variant_dict=variant_dict, iter_num=iter_num)
 
 
-def repeat_measurements(in_path, out_path, num_iterations=1):
+def repeat_measurements(num_iterations=1):
 
     # Looping through required number of repeated measurements
-    for n in range(1, num_iterations+1):
-
-        # Creating subdirectory path to store current output data in
-        current_output_directory = out_path + '\\variant_simulation_%s' % n
-
-        # Creating the output subdirectory if it does not already exist
-        if not os.path.isdir(current_output_directory):
-            os.mkdir(current_output_directory)
+    for n in range(num_iterations):
 
         # Completing variant transmission simulation
-        variant_transmission_tree = simulate_variant_transmission(n=n, input_path=in_path, output_path=current_output_directory)
+        variant_transmission_tree = analyse_variant_transmission(iter_num=n)
 
         # Completing variant evolution simulation
-        simulate_variant_evolution(variant_transmission_tree=variant_transmission_tree, n=n, output_path=current_output_directory)
-
-        # Displaying progress
-        print(n)
+        simulate_variant_evolution(variant_transmission_tree=variant_transmission_tree, iter_num=n)
 
 
 ##### MAIN
 
-in_file_path = 'simulation_data\\individual_sim_outfile'
-out_file_path = 'variant_data'
-
-# Checking if directory containing data exists
-if not os.path.isdir('simulation_data'):
-    print('No data found, requires individual simulation data files to be placed in a directory called simulation_data')
-
-# Creating a directory to store variant data in
-if not os.path.isdir(out_file_path):
-    os.mkdir(out_file_path)
+# Setting number of measurement iterations
+n_iterations = 1
 
 # Running repeated measurements
-repeat_measurements(in_path=in_file_path, out_path=out_file_path, num_iterations=2)
+repeat_measurements(num_iterations=n_iterations)
