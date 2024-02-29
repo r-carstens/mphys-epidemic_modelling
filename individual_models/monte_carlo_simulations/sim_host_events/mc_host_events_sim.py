@@ -303,15 +303,12 @@ def repeat_simulation(N, num_alive_nodes, I0, t_max, num_iterations=1):
     event_impact = get_event_impact(sim_time=t_max, event_times=event_times, baseline_rate=mu_D_star)
 
     # Creating file to write catastrophic event data to
-    event_outfile = open(event_path + '.txt', 'w')
-    event_outfile.write('event_occurred,event_impact')
+    with open(event_path + '.txt', 'w') as event_outfile:
+        event_outfile.write('event_occurred,event_impact')
 
-    # Writing catastrophic event data
-    for event_data in list(zip(event_times, event_impact)):
-        event_outfile.write('\n%s,%s' % (event_data))
-
-    # Closing the file
-    event_outfile.close()
+        # Writing catastrophic event data
+        for event_data in list(zip(event_times, event_impact)):
+            event_outfile.write('\n%s,%s' % (event_data))
 
     # Repeating entire simulation required number of times
     for n in range(num_iterations):
