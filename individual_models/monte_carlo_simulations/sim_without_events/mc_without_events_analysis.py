@@ -1,12 +1,8 @@
-# Making the required imports
 import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Epidemiological Parameters
-gamma = 0.1
-sigma = 0
 
 # Creating out file names to be used for storing and reading data
 mcs_path = 'mcs_without_events'
