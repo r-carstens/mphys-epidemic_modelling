@@ -41,7 +41,7 @@ def initialise_transmission_tree(iter_num):
         transmission_tree.add_edge(infection_df['source_label'][ind], infection_df['target_label'][ind])
 
     # Adding attributes to each node
-    attributes = {'has_mutated': False, 'strain': '', 'variant': ''}
+    attributes = {'has_mutated': False, 'has_emerged': False, 'strain': '', 'variant': ''}
     nx.set_node_attributes(transmission_tree, {node: attributes for node in transmission_tree.nodes})
 
     # Accessing the node that caused the first infection and giving it variant 'a'
@@ -93,13 +93,16 @@ def simulate_variants(transmission_tree):
 
     # Looping through the graph in order of infections
     for node in list(nx.topological_sort(transmission_tree)):
-        
+
         # Splitting the current strain mutations
         mutations = transmission_tree.nodes()[node]['strain'].split('_')
 
         # Checking if a variant emerges
         if len(mutations) >= req_n_mutations:
 
+            # Indicating that variant emerged at current host
+            transmission_tree.nodes()[node]['has_emerged'] = True
+        
             # Creating a variable to store the newly emerged variant
             new_variant = ''
             
@@ -142,10 +145,10 @@ def save_variant_transmission_data(transmission_tree, iter_num):
 
         # Accessing useful information
         successors = list(transmission_tree.successors(node))
-        has_mutated, strain_name, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
+        has_mutated, has_emerged, strain_name, variant_name = [attribute for attribute in transmission_tree.nodes()[node].values()]
 
         # Creating df entry
-        entry = {'node': node, 'mutation_occurred': has_mutated, 'strain_infected_by': strain_name, 'variant_infected_by': variant_name, 'successors': successors}
+        entry = {'node': node, 'mutation_occurred': has_mutated, 'variant_emerged': has_emerged, 'strain_infected_by': strain_name, 'variant_infected_by': variant_name, 'successors': successors}
 
         # Adding data to the df
         variant_df = variant_df._append(entry, ignore_index=True)
