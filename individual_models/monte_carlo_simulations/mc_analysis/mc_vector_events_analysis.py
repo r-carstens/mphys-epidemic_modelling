@@ -3,9 +3,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Creating out file names to be used for storing and reading data
+# Setting filenames to be used for storing and reading data
 event_path = 'vector_event_outfile'
-mcs_path = 'mcs_vector_event_data'
 complete_path = 'complete_vector_event_data'
 
 
