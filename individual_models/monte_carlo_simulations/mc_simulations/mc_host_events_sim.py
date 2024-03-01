@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 
-# Creating out file names to be used for storing and reading data
+
+# Setting filenames to be used for storing and reading data
 event_path = 'host_event_outfile'
-mcs_path = 'mcs_host_event_data'
 complete_path = 'complete_host_event_data'
 
 # Initialising possible infection states
@@ -19,7 +19,7 @@ immune = 'M'
 N = 1000
 N_alive = N
 I0 = 1
-t_max = 100
+t_max = 100000
 dt = 0.2
 
 # Epidemiological Parameters
@@ -32,7 +32,7 @@ mu_D_star = 0.07  # death rate baseline
 lam = 0.07        # noise element of death rate evolution
 nu = 1.0          # death rate reversion to baseline rate
 omega = 0.2       # size of shock
-kappa = 0.002       # shock frequency
+kappa = 0.0002    # shock frequency
 N_star = N
 
 
@@ -248,11 +248,6 @@ def get_state_totals(G):
 
 def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
 
-    # Creating a file to store MCS data to
-    mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
-    mcs_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
-    
     # Creating a file to store totals to
     complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
     complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
@@ -261,7 +256,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
-        # # Updating vital dynamics
+        # Updating vital dynamics
         G, n_new_births = G,0#update_host_births(G)
         G, n_new_deaths = G,0#update_host_deaths(G, death_rate=event_impact[t])
 
@@ -269,29 +264,21 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
         n_alive = len([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
         n_dead = G.number_of_nodes() - n_alive
 
-        # Looping through node totals
-        for n in range(G.number_of_nodes()):
+        # Completing an iteration step
+        G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
 
-            # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
-    
-            # Updating network if required
-            if target_before != target_after:
-                G.nodes()[target_label]['state'] = target_after
-    
-            # Counting the number of individuals in each state
-            S_total, I_total, M_total = get_state_totals(G)
-    
-            # # Logging step results
-            mcs_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_new_births, n_new_deaths, n_alive, n_dead))
+        # Updating network if required
+        if target_before != target_after:
+            G.nodes()[target_label]['state'] = target_after
 
+        # Counting the number of individuals in each state
+        S_total, I_total, M_total = get_state_totals(G)
+    
         # Logging total results
         complete_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
         t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_new_births, n_new_deaths, n_alive, n_dead))
         
-    # Closing the data files
-    mcs_outfile.close()
+    # Closing the data file
     complete_outfile.close()
 
 
@@ -322,5 +309,6 @@ def repeat_simulation(N, num_alive_nodes, I0, t_max, num_iterations=1):
 
 ##### MAIN
 
-# Repeating the simulation
-repeat_simulation(N=N, num_alive_nodes=N_alive, I0=I0, t_max=t_max, num_iterations=1)
+# Repeating the simulation for a required number of iterations
+n_iterations = 1
+repeat_simulation(N=N, num_alive_nodes=N_alive, I0=I0, t_max=t_max, num_iterations=n_iterations)

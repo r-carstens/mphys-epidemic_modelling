@@ -4,10 +4,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-# Creating out file names to be used for storing and reading data
-mcs_path = 'mcs_without_events'
-complete_path = 'complete_without_events'
-
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
@@ -20,8 +16,11 @@ sigma = 0
 # Setting simulation data
 N = 1000
 I0 = 1
-t_max = 100
+t_max = 100000
 dt = 0.2
+
+# Setting filename to be used for storing and reading data
+complete_path = 'complete_without_events'
 
 
 ##### NETWORK INITIALISATION
@@ -137,41 +136,28 @@ def get_state_totals(G):
 def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
 
     # Creating a file to store the results to
-    mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
-    mcs_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
-
-    # Creating a file to store the results to
     complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
-    complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
+    complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time, gamma, sigma))
     complete_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
         
-        # Looping through node totals
-        for n in range(G.number_of_nodes()):
+        # Completing an iteration step
+        G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
+        
+        # Updating network if required
+        if target_before != target_after:
+            G.nodes()[target_label]['state'] = target_after
 
-            # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
-            
-            # Updating network if required
-            if target_before != target_after:
-                G.nodes()[target_label]['state'] = target_after
+        # Counting the number of individuals in each state
+        S_total, I_total, M_total = get_state_totals(G)
     
-            # Counting the number of individuals in each state
-            S_total, I_total, M_total = get_state_totals(G)
-    
-            # Logging the MCS results
-            mcs_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
-
         # Logging total results
         complete_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
         t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
-    # Closing the data files
-    mcs_outfile.close()
+    # Closing the data file
     complete_outfile.close()
 
 

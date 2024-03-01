@@ -4,9 +4,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-# Creating out file names to be used for storing and reading data
+# Setting filenames to be used for storing and reading data
 event_path = 'vector_event_outfile'
-mcs_path = 'mcs_vector_event_data'
 complete_path = 'complete_vector_event_data'
 
 # Initialising possible infection states
@@ -17,7 +16,7 @@ immune = 'M'
 # Setting simulation data
 N = 1000
 I0 = 1
-t_max = 100
+t_max = 100000
 dt = 0.2
 
 # Epidemiological Parameters
@@ -29,7 +28,7 @@ baseline_transmission = 0.4  # setting the baseline mosquito transmission probab
 lam = 0.07                   # noise element of death rate evolution
 nu = 1.0                     # death rate reversion to baseline rate
 omega = 0.5                  # size of shock
-kappa = 0.002                # shock frequency
+kappa = 0.0002               # shock frequency
 
 
 ##### NETWORK INITIALISATION
@@ -173,11 +172,6 @@ def get_state_totals(G):
 def run_simulation_iteration(G, n_nodes, I0, event_impact, sim_time, iter_num):
 
     # Creating a file to store the results to
-    mcs_outfile = open(mcs_path + '_%s.txt' % (iter_num + 1), 'w')
-    mcs_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    mcs_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
-
-    # Creating a file to store the results to
     complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
     complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
     complete_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
@@ -185,32 +179,24 @@ def run_simulation_iteration(G, n_nodes, I0, event_impact, sim_time, iter_num):
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
         
-        # Looping through node totals
-        for n in range(G.number_of_nodes()):
+        # Determining the current mosquito transmission potential
+        current_event_impact = event_impact[t]
 
-            # Determining the current mosquito transmission potential
-            current_event_impact = event_impact[t]
-    
-            # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after = complete_step(G, event_impact=current_event_impact)
-    
-            # Updating network if required
-            if target_before != target_after:
-                G.nodes()[target_label]['state'] = target_after
-    
-            # Counting the number of individuals in each state
-            S_total, I_total, M_total = get_state_totals(G)
-    
-            # Logging MCS results
-            mcs_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
+        # Completing an iteration step
+        G, source_label, target_label, source_during, target_before, target_after = complete_step(G, event_impact=current_event_impact)
 
+        # Updating network if required
+        if target_before != target_after:
+            G.nodes()[target_label]['state'] = target_after
+
+        # Counting the number of individuals in each state
+        S_total, I_total, M_total = get_state_totals(G)
+    
         # Logging totals result
         complete_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
         t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
-    # Closing the data files
-    mcs_outfile.close()
+    # Closing the data file
     complete_outfile.close()
 
 
