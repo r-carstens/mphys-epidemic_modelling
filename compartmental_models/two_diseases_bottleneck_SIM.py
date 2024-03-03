@@ -115,7 +115,7 @@ class Compartments:
                              + beta_1 * sigma_1 * M1I2 * (I1S2 + I1I2 + I1M2)  # partial infection by 1
                              - gamma_1 * I1I2                                  # recovery from 1
                              + beta_2 * I1S2 * (S1I2 + I1I2 + M1I2)            # full infection by 2
-                             - sigma_2 * beta_2 * I1M2 * (S1I2 + I1I2 + M1I2)  # partial infection by 2
+                             + sigma_2 * beta_2 * I1M2 * (S1I2 + I1I2 + M1I2)  # partial infection by 2
                              - gamma_2 * I1I2                                  # recovery from 2
                              - mu_D_i * I1I2)                                  # death
 
