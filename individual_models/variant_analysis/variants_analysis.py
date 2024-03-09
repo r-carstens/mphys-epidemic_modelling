@@ -21,6 +21,9 @@ immune = 'M'
 # Setting a mutation rate
 p_mutation = 0.3
 
+# Setting whether cross-immunity should be incorporated
+cross_immunity = True
+
 
 ##### TRANSMISSION TREE ANALYSIS
 
@@ -61,7 +64,9 @@ def get_transmission_dict(infection_df):
     return transmission_dict
 
 
-def get_substitution_dict(transmission_dict):
+##### MODELLING SUBSTITUTIONS ACROSS TREE
+
+def get_substitution_tree(transmission_dict):
 
     # Creating an array of possible subsitutions
     sub_names = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
@@ -79,7 +84,7 @@ def get_substitution_dict(transmission_dict):
     pathogen_name_dict[t_zero] = 'a'
     
     # Adding the first node to the tree
-    sub_tree.add_node(first_node, time_infected=[t_zero], pathogen_name_hist=pathogen_name_dict, current_pathogen_name='a')
+    sub_tree.add_node(first_node, time_infected=[t_zero], reinfection=[False], pathogen_name_hist=pathogen_name_dict, current_pathogen_name='a')
     
     # Looping through the transmission data in order of increasing time
     for t, data in transmission_dict.items():
@@ -106,16 +111,61 @@ def get_substitution_dict(transmission_dict):
             pathogen_name_dict[t] = target_pathogen
 
             # Adding the node and attributes
-            sub_tree.add_node(target_label, time_infected=[t], pathogen_name_hist=pathogen_name_dict, current_pathogen_name=target_pathogen)
+            sub_tree.add_node(target_label, time_infected=[t], reinfection=[reinfection_occurred],
+                              pathogen_name_hist=pathogen_name_dict, current_pathogen_name=target_pathogen)
     
         else:
 
             # Updating the node data
             sub_tree.nodes()[target_label]['time_infected'].append(t)
+            sub_tree.nodes()[target_label]['reinfection'].append(reinfection_occurred)
             sub_tree.nodes()[target_label]['pathogen_name_hist'][t] = target_pathogen
             sub_tree.nodes()[target_label]['current_pathogen_name'] = target_pathogen
 
     return sub_tree
+
+
+##### PRODUCING THE PHYLOGENETIC TREE
+
+def get_unique_pathogens(sub_tree):
+    
+    # Determining all possible pathogens
+    possible_pathogens = []
+    
+    # Looping through all nodes in the tree
+    for node, data in sub_tree.nodes(data=True):
+    
+        # Adding the variants encountered by the current node
+        possible_pathogens.extend([value for key, value in data['pathogen_name_hist'].items()])
+    
+    # Determining all unique pathogens
+    possible_pathogens = np.array(possible_pathogens)
+    unique_pathogens = np.unique(possible_pathogens)
+
+    return unique_pathogens
+
+    
+def get_phylogenetic_tree(sub_tree):
+
+    # Creating a graph to store the phylogenetic data
+    phylo_tree = nx.DiGraph()
+
+    # Determining all unique pathogens
+    unique_pathogens = get_unique_pathogens(sub_tree=sub_tree)
+
+    # Looping through the unique pathogens
+    for pathogen in unique_pathogens:
+
+        # Substitutions are denoted by the final instance of '_' (eg '1' becomes '1_2', but '1_2_3' is a mutation of '1_2')
+        substitutions = pathogen.split('_')
+
+        # Looping through the data up to each instance of '_'
+        for i in range(1, len(substitutions)):
+
+            # Adding an edge between the the old variant and new mutation (character after the final instance '_')
+            phylo_tree.add_edge('_'.join(substitutions[:i]), '_'.join(substitutions[:i + 1]))
+
+    return phylo_tree
 
 
 ##### MAIN
@@ -125,5 +175,7 @@ inf_df = get_infection_df(iter_num=0)
 transmission_dict = get_transmission_dict(infection_df=inf_df)
 
 # Simulating substitutions accross the tree
-substitution_tree = get_substitution_dict(transmission_dict=transmission_dict)
-    
+substitution_tree = get_substitution_tree(transmission_dict=transmission_dict)
+
+# Creating the phylogenetic tree
+phylo_tree = get_phylogenetic_tree(sub_tree=substitution_tree)
