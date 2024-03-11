@@ -296,8 +296,6 @@ transmission_tree = get_transmission_tree(transmission_dict=transmission_dict)
 substitution_dict = get_substitution_dict(transmission_dict)
 substitution_tree = get_substitution_tree(substitution_dict, transmission_tree)
 
-# Creating the phylogenetic tree
+# Creating the phylogenetic tree and implementing cross immunity
 phylogenetic_tree = get_phylogenetic_tree(sub_tree=substitution_tree)
-
-# Implementing cross immunity
 cross_immunity_dict = get_cross_immunity_dict(sub_dict=substitution_dict, sub_tree=substitution_tree, phylo_tree=phylogenetic_tree)
