@@ -195,7 +195,7 @@ def get_phylogenetic_tree(sub_tree):
     # Looping through the unique pathogens
     for pathogen in unique_pathogens:
 
-        # Substitutions are denoted by the final instance of '_' (eg '1' becomes '1_2', but '1_2_3' is a mutation of '1_2')
+        # Substitutions are denoted by the final instance of '_' (eg '1_2' is a mutation of '1', and '1_2_3' is a mutation of '1_2')
         substitutions = pathogen.split('_')
 
         # Looping through the data up to each instance of '_'
@@ -283,7 +283,6 @@ def get_cross_immunity_dict(sub_dict, sub_tree, phylo_tree):
 
 
 ##### MAIN
-
 
 # Reading all data that involved an infection from the results file
 inf_df = get_infection_df(iter_num=0)
