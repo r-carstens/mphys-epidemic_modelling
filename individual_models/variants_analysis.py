@@ -275,6 +275,55 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
     return cross_tree
 
 
+##### MODELLING VARIANT EMERGENCE
+
+def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8):
+
+    # Determining all event timesteps and the number of events
+    all_timesteps = [data['timestep'] for source_label, target_label, data in sorted_tree_edges]
+    n_timesteps = len(all_timesteps)
+
+    # Determining when the time intervals will be set
+    t1 = int(t1_percent * n_timesteps)
+    t2 = int(t2_percent * n_timesteps)
+
+    # Determining the time at the intervals
+    t1_step = all_timesteps[t1]
+    t2_step = all_timesteps[t2]
+
+    return t1_step, t2_step
+
+
+def get_snapshot_tree(tree):
+
+    # Creating a dictionary to store all event timesteps, sources, and target nodes within the snapshot
+    snapshot_dict = dict()
+
+    # Sorting the tree in order of increasing time
+    sorted_tree_edges = get_sorted_tree_edges(tree)
+
+    # Determining the timesteps to cut the tree at
+    t1_step, t2_step = get_time_intervals(sorted_sub)
+
+    # Removing all events before the first timestep
+    for source_label, target_label, data in sorted_tree_edges:
+        
+        # Extracting data from the current event
+        timestep, reinfection_occurred, substitution_occurred = [value for key, value in data.items()]
+
+        # Checking if the current transmission falls within the time snapshot
+        if t1_step <= timestep <= t2_step:
+
+            # Determining the current source and target nodes
+            current_source_node = tree.nodes(data=True)[source_label]
+            current_target_node = tree.nodes(data=True)[target_label]
+
+            # Storing the data
+            snapshot_dict[timestep] = {'source_node': current_source_node, 'target_node': current_target_node}
+
+    return snapshot_dict
+
+
 ##### MAIN
 
 # Reading all data that involved an infection from the results file and producing a transmission dictionary
@@ -292,3 +341,6 @@ phylogenetic_tree = get_phylogenetic_tree(substitution_tree)
 
 # Producing the cross-immunity tree
 cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
+
+# Analysing variant emergence
+snapshot_tree = get_tree_snapshot(substitution_tree)
