@@ -303,7 +303,7 @@ def get_snapshot_tree(tree):
     sorted_tree_edges = get_sorted_tree_edges(tree)
 
     # Determining the timesteps to cut the tree at
-    t1_step, t2_step = get_time_intervals(sorted_sub)
+    t1_step, t2_step = get_time_intervals(sorted_tree_edges)
 
     # Removing all events before the first timestep
     for source_label, target_label, data in sorted_tree_edges:
@@ -322,6 +322,15 @@ def get_snapshot_tree(tree):
             snapshot_dict[timestep] = {'source_node': current_source_node, 'target_node': current_target_node}
 
     return snapshot_dict
+
+
+def get_variant_diversity(snapshot_tree):
+    
+    for key, data in snapshot_tree.items():
+
+        # Extracting the source and target node data
+        source_node = data['source_node']
+        target_node = data['target_node']
 
 
 ##### MAIN
@@ -343,4 +352,5 @@ phylogenetic_tree = get_phylogenetic_tree(substitution_tree)
 cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
 
 # Analysing variant emergence
-snapshot_tree = get_tree_snapshot(substitution_tree)
+snapshot_tree = get_snapshot_tree(substitution_tree)
+get_variant_diversity(snapshot_tree)
