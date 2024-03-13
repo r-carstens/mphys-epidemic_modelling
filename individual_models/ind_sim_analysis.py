@@ -11,7 +11,7 @@ import os
 complete_path = 'complete_without_events'
 
 # Setting number of files to analyse
-n_iterations = 1
+n_iterations = 10
 
 # Initialising possible infection states
 susceptible = 'S'
@@ -30,6 +30,8 @@ def get_sorted_tree_edges(multi_tree):
     sorted_edges = sorted(multi_tree.edges(data=True), key=lambda edge: edge[2]['timestep'])
     return sorted_edges
 
+
+################################################## TREES
 
 ##### TRANSMISSION TREE ANALYSIS
 
@@ -277,6 +279,8 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
     return cross_tree
 
 
+################################################## ANALYSIS
+
 ##### SECONDARY INFECTIONS ANAYSIS 
 
 def get_secondary_infections(multi_tree):
@@ -374,31 +378,62 @@ def get_variant_diversity(snapshot_tree):
         target_node = data['target_node']
 
 
+################################################## REPEATED MEASUREMENTS
 
 ##### PRODUCING TREES
 
-# Reading all data that involved an infection from the results file and producing a transmission dictionary
-inf_df = get_infection_df(iter_num=0)
-transmission_dict = get_transmission_dict(inf_df)
+def get_trees(n=0):
 
-# Producing the transmission tree
-transmission_tree = get_transmission_tree(transmission_dict)
+    # Reading all data that involved an infection from the results file and producing a transmission dictionary
+    inf_df = get_infection_df(iter_num=n)
+    transmission_dict = get_transmission_dict(inf_df)
+    
+    # Producing the transmission tree
+    transmission_tree = get_transmission_tree(transmission_dict)
+    
+    # Producing the substitution tree
+    substitution_tree = get_substitution_tree(transmission_tree)
+    
+    # Producing the phylogenetic tree
+    phylogenetic_tree = get_phylogenetic_tree(substitution_tree)
+    
+    # Producing the cross-immunity tree
+    cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
 
-# Producing the substitution tree
-substitution_tree = get_substitution_tree(transmission_tree)
-
-# Producing the phylogenetic tree
-phylogenetic_tree = get_phylogenetic_tree(substitution_tree)
-
-# Producing the cross-immunity tree
-cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
+    return inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree
+    
 
 ##### ANALYSING TREES
 
-# Analysing variant emergence
-snapshot_tree = get_snapshot_tree(substitution_tree)
-get_variant_diversity(snapshot_tree)
+def get_R0_analysis(tree):
 
-# Determining transmission tree R0
-second_infections_dict = get_secondary_infections(transmission_tree)
-avg_secondary_infection = get_average_secondary_infections(second_infections_dict)
+    # Determining transmission tree R0
+    second_infections_dict = get_secondary_infections(transmission_tree)
+    avg_secondary_infection = get_average_secondary_infections(second_infections_dict)
+
+    return second_infections_dict, avg_secondary_infection
+
+
+def get_variant_analysis(sub_tree):
+    
+    # Analysing variant emergence
+    snapshot_tree = get_snapshot_tree(sub_tree)
+    get_variant_diversity(snapshot_tree)
+
+    return snapshot_tree
+
+
+################################################## MAIN
+
+# Looping through all simulations
+for n in range(n_iterations):
+
+    # Determining the relevant simulation trees and data
+    inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(n)
+
+    # R0 analysis
+    second_infections_dict, avg_secondary_infection = get_R0_analysis(transmission_tree)
+
+    # Variant analysis
+    snapshot_tree = get_variant_analysis(substitution_tree)
+    
