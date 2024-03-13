@@ -31,43 +31,6 @@ def get_sorted_tree_edges(multi_tree):
     return sorted_edges
 
 
-def get_secondary_infections(multi_tree):
-
-    # Creating a structure to store the number of secondary infections by each node
-    secondary_infections_dict = dict()
-    
-    # Sorting the edges in order of increasing time
-    sorted_edges = get_sorted_tree_edges(multi_tree)
-    
-    # Looping through the edges in order of increasing time
-    for source_node, target_node, data in sorted_edges:
-    
-        # Checking in the node already exists within the dictionary 
-        if source_node in secondary_infections_dict.keys():
-
-            # Storing the infection of the current target node
-            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
-            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
-    
-        else:
-    
-            # Initialising secondary infections with new target node
-            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
-
-    return secondary_infections_dict
-
-
-def get_average_secondary_infections(second_infs_dict):
-
-    # Determining the secondary infections for all nodes
-    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
-
-    # Determining the average value
-    avg_seconday_infection = np.average(all_secondary_infections)
-
-    return avg_seconday_infection
-
-
 ##### TRANSMISSION TREE ANALYSIS
 
 def get_infection_df(iter_num):
@@ -314,7 +277,46 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
     return cross_tree
 
 
-##### MODELLING VARIANT EMERGENCE
+##### SECONDARY INFECTIONS ANAYSIS 
+
+def get_secondary_infections(multi_tree):
+
+    # Creating a structure to store the number of secondary infections by each node
+    secondary_infections_dict = dict()
+    
+    # Sorting the edges in order of increasing time
+    sorted_edges = get_sorted_tree_edges(multi_tree)
+    
+    # Looping through the edges in order of increasing time
+    for source_node, target_node, data in sorted_edges:
+    
+        # Checking in the node already exists within the dictionary 
+        if source_node in secondary_infections_dict.keys():
+
+            # Storing the infection of the current target node
+            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
+            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
+    
+        else:
+    
+            # Initialising secondary infections with new target node
+            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
+
+    return secondary_infections_dict
+
+
+def get_average_secondary_infections(second_infs_dict):
+
+    # Determining the secondary infections for all nodes
+    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
+
+    # Determining the average value
+    avg_seconday_infection = np.average(all_secondary_infections)
+
+    return avg_seconday_infection
+
+
+##### VARIANT ANALYSIS
 
 def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8):
 
@@ -370,6 +372,7 @@ def get_variant_diversity(snapshot_tree):
         # Extracting the source and target node data
         source_node = data['source_node']
         target_node = data['target_node']
+
 
 
 ##### PRODUCING TREES
