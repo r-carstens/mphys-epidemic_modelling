@@ -1,14 +1,17 @@
 import os
 import numpy as np
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-import pandas as pd
 from tqdm import tqdm
 
 
-# Setting filenames to be used for storing and reading data
-event_path = 'host_event_outfile'
-complete_path = 'complete_host_event_data'
+# Setting filename to be used for storing and reading data
+file_path = 'sim_with_hosts'
+event_path = 'host_events'
+
+# Setting the number of iteratino repeates
+n_iterations = 1
 
 # Initialising possible infection states
 susceptible = 'S'
@@ -16,24 +19,23 @@ infected = 'I'
 immune = 'M'
 
 # Setting simulation data
-N = 1000
-N_alive = N
-I0 = 1
-t_max = 100000
+N = 100
+N_alive = int(0.8 * N)
+I0 = 10
+t_max = 10000
 dt = 0.2
 
-# Epidemiological Parameters
+# Setting epidemiological Parameters
 gamma = 0.1
 sigma = 0
 
-# Host bottleneck parameters
-mu_B = 0.15
-mu_D_star = 0.07  # death rate baseline
-lam = 0.07        # noise element of death rate evolution
-nu = 1.0          # death rate reversion to baseline rate
-omega = 0.2       # size of shock
-kappa = 0.0002    # shock frequency
-N_star = N
+# Setting vital parameters
+p_birth = 0.05
+p_death = 0.001
+
+# Setting catastrophic events parameters
+kappa = 0.002
+omega = 0.2
 
 
 ##### NETWORK INITIALISATION
@@ -77,32 +79,22 @@ def initialise_graph(n_nodes, n_alive):
 
 def initialise_infections(G, n_nodes, n_infected):
 
-    # Creating a list of infection statuses
-    node_states = np.array([susceptible for node in G.nodes()])
+    # Determining all living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
 
-    # Randomly choosing infected individuals and setting those individuals to infected
-    random_infected_nodes = np.random.choice(np.arange(n_nodes), size=n_infected, replace=False)
-    node_states[random_infected_nodes] = infected
+    # Randomly infecting living nodes
+    random_infected_nodes = np.random.choice(living_nodes, size=n_infected, replace=False)
 
-    # Adding node states
-    for n in range(G.number_of_nodes()):
-        G.nodes()[n]['state'] = node_states[n]
+    # Looping through all nodes
+    for node in range(G.number_of_nodes()):
 
-    return G
+        # Checking if current node was chosen to be infected
+        if node in random_infected_nodes:
+            G.nodes()[node]['state'] = infected
 
-
-def initialise_infections(G, n_nodes, n_infected):
-
-    # Creating a list of infection statuses
-    node_states = np.array([susceptible for node in G.nodes()])
-
-    # Randomly choosing infected individuals and setting those individuals to infected
-    random_infected_nodes = np.random.choice(np.arange(n_nodes), size=n_infected, replace=False)
-    node_states[random_infected_nodes] = infected
-
-    # Adding node states
-    for n in range(G.number_of_nodes()):
-        G.nodes()[n]['state'] = node_states[n]
+        # Otherwise making node susceptible
+        else:
+            G.nodes()[node]['state'] = susceptible
 
     return G
 
@@ -115,72 +107,67 @@ def get_event_times(sim_time):
     return np.random.uniform(size=sim_time) < (kappa * dt)
 
 
-def get_event_impact(sim_time, event_times, baseline_rate):
+def get_event_impact(sim_time, event_times):
 
     # Initialising an array to store the event impact at each step
-    event_impact = np.zeros(shape=sim_time)
-    event_impact[0] = baseline_rate
+    event_impact = np.ones(shape=sim_time) * p_death
 
-    for t in range(sim_time - 1):
-
-        # Determining the mosquito transmission at the current timestep
-        check_for_event = int(event_times[t])
-
-        # Determining the new tranmission probability
-        new_impact = dt * (lam * np.random.normal() - nu * (event_impact[t] - baseline_rate)) + check_for_event * omega
-
-        # Updating the event impact and ensuring it lies between 0 and 1
-        event_impact[t+1] = min(max(event_impact[t] + new_impact, 0), max(1, omega))
-
+    # Increasing probability at chosen steps
+    event_impact[event_times] += omega
+    
     return event_impact
 
 
-##### SIMULATING VITAL DYNAMICS
+##### RUNNING THE SIMULATION
 
-def update_host_births(G):
+def get_host_births(G):
+
+    # Setting counter to determine number of births
+    n_births = 0
 
     # Determining the labels of dead nodes
     all_dead_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'dead']
 
-    # Determining the number of alive nodes
-    n_alive_nodes = G.number_of_nodes() - len(all_dead_nodes)
+    # Looping through each dead node
+    for node in all_dead_nodes:
+
+        # Checking if it becomes reborn
+        if np.random.uniform() < p_birth:
+
+            # Updating node parameters
+            G.nodes()[node]['vitals'] = 'alive'
+            G.nodes()[node]['state'] = susceptible
+
+            # Incrementing birth count
+            n_births += 1
+
+    return G, n_births
+
+
+def get_host_deaths(G, current_p_death):
+
+    # Setting counter to hold number of deaths
+    n_deaths = 0
+
+    # Determining the labels of living nodes
+    all_living_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive']
     
-    # Determining the number of new births
-    n_new_births = int(mu_B * n_alive_nodes * (1 - (n_alive_nodes / N_star)) * dt)
+    # Looping through each living node
+    for node in all_living_nodes:
 
-    # Randomly choosing dead nodes to switch to alive (replace=False to ensure the same item isn't chosen twice)
-    newly_alive_nodes = np.random.choice(all_dead_nodes, size=n_new_births, replace=False)
+        # Checking if it dies
+        if np.random.uniform() < current_p_death:
 
-    # Setting the dead nodes to alive
-    for alive_node in newly_alive_nodes:
-        G.nodes()[alive_node]['vitals'] = 'alive'
-    
-    return G, n_new_births
-     
+            # Updating parameters
+            G.nodes()[node]['vitals'] = 'dead'
+            n_deaths +=1
 
-def update_host_deaths(G, death_rate):
+    return G, n_deaths
 
-    # Determining the number and labels of living nodes
-    all_alive_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive']
-    n_alive_nodes = len(all_alive_nodes)
-    
-    # Determining the number of removed nodes
-    n_new_deaths = int(n_alive_nodes * death_rate)
-
-    # Randomly choosing alive nodes to switch to dead (replace=False to ensure the same item isn't chosen twice)
-    newly_died_nodes = np.random.choice(all_alive_nodes, size=n_new_deaths, replace=False)
-
-    # Setting the alive nodes to dead
-    for dead_node in newly_died_nodes:
-        G.nodes()[dead_node]['vitals'] = 'dead'
-
-    return G, n_new_deaths
-    
-
-##### SIMULATING DISEASE TRANSMISSION
 
 def check_for_infection(G, source_label, target_label, reinfection):
 
+    # Initialising variable
     infection_event = False
 
     # Determining the probability of transmission along the node edge
@@ -205,11 +192,8 @@ def check_for_recovery():
 
 def complete_step(G):
 
-    # Determining the labels of all living nodes
-    all_alive_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive']
-
-    # Choosing two neighbours at random within the living node population
-    source_node, target_node = np.random.choice(all_alive_nodes, size=2, replace=False)
+    # Choosing two neighbours at random within the population
+    source_node, target_node = np.random.choice(np.arange(G.number_of_nodes()), size=2, replace=False)
 
     # Determining the states of the target and source
     target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
@@ -246,27 +230,23 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
+def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
 
-    # Creating a file to store totals to
-    complete_outfile = open(complete_path + '_%s.txt' % (iter_num + 1), 'w')
-    complete_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time,gamma,sigma))
-    complete_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,new_births,new_deaths,alive_total,dead_total')
+    # Creating a file to store the results to
+    outfile = open(file_path + '_%s.txt' % (iter_num + 1), 'w')
+    outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
+    outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,n_births,n_deaths')
 
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
-        # Updating vital dynamics
-        G, n_new_births = G,0#update_host_births(G)
-        G, n_new_deaths = G,0#update_host_deaths(G, death_rate=event_impact[t])
-
-        # Determining number of dead and alive nodes
-        n_alive = len([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
-        n_dead = G.number_of_nodes() - n_alive
-
+        # Updating host dynamics
+        G, n_births = get_host_births(G)
+        G, n_deaths = get_host_deaths(G, current_p_death=event_impact[t])
+        
         # Completing an iteration step
         G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
-
+        
         # Updating network if required
         if target_before != target_after:
             G.nodes()[target_label]['state'] = target_after
@@ -275,18 +255,18 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, iter_num):
         S_total, I_total, M_total = get_state_totals(G)
     
         # Logging total results
-        complete_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-        t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_new_births, n_new_deaths, n_alive, n_dead))
-        
+        outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+        t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_births, n_deaths))
+
     # Closing the data file
-    complete_outfile.close()
+    outfile.close()
 
 
-def repeat_simulation(N, num_alive_nodes, I0, t_max, num_iterations=1):
+def repeat_simulation(N, I0, t_max, num_iterations=1):
 
-    # Simulating when catastrophic events will occur
-    event_times = get_event_times(sim_time=t_max)
-    event_impact = get_event_impact(sim_time=t_max, event_times=event_times, baseline_rate=mu_D_star)
+    # Determining event impact for simulations
+    event_times = get_event_times(t_max)
+    event_impact = get_event_impact(t_max, event_times)
 
     # Creating file to write catastrophic event data to
     with open(event_path + '.txt', 'w') as event_outfile:
@@ -300,15 +280,134 @@ def repeat_simulation(N, num_alive_nodes, I0, t_max, num_iterations=1):
     for n in range(num_iterations):
 
         # Initialising the simulation
-        G = initialise_graph(n_nodes=N, n_alive=num_alive_nodes)
+        G = initialise_graph(n_nodes=N, n_alive=N_alive)
         G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
         # Running the simulation
-        run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, event_impact=event_impact, iter_num=n)
+        run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n, event_impact=event_impact)
+
+
+##### CREATING USEFUL DATAFRAMES
+
+def get_simulation_parameters():
+
+    # Creating a structure to store the simulation parameters
+    parameters_dict = dict()
+
+    # Locating all data files within the directory
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(file_path)]
+
+    # Opening the first file (all simulation repeats have the same basic parameters)
+    with open(sim_data_files[0], 'r') as in_file:
+
+        # Reading first line
+        data = in_file.readline().strip().split(',')
+
+    # Looping through tuples of the form (parameter_name, value)
+    for parameter_data in [parameter.split('=') for parameter in data]:
+        
+        # Storing the name and value
+        parameter_name, parameter_value = parameter_data
+        parameters_dict[parameter_name] = float(parameter_value)
+
+    return parameters_dict
+    
+
+def get_events_dataframe():
+
+    # Reading in the data
+    events_df = pd.read_csv(event_path + '.txt', delimiter=',')
+    return events_df
+
+
+def get_results_dataframe():
+
+    # Creating a dataframe to store all results from all files
+    results_df = pd.DataFrame()
+
+    # Locating all data files within the directory
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(file_path)]
+
+    # Looping through each data file
+    for counter, file in enumerate(sim_data_files):
+
+        # Reading in the data
+        current_df = pd.read_csv(file, delimiter=',', skiprows=1)
+
+        # Changing column names to match their origin file (i.e. 'column_name_number')
+        new_col_names = [current_df.columns[0]] + [col_name + '_%s' % (counter+1) for col_name in current_df.columns[1:]]
+        current_df.columns = new_col_names
+
+        # Concatenating the current results to the results dataframe
+        results_df = pd.concat([results_df, current_df], axis=1)
+
+    return results_df
+
+
+def get_state_dataframes(results_df):
+
+    # Extracting the state data
+    susceptible_df = results_df.filter(regex='S_total')
+    infected_df = results_df.filter(regex='I_total')
+    immune_df = results_df.filter(regex='M_total')
+
+    # Adding mean data
+    susceptible_df = susceptible_df.assign(S_total_mean=susceptible_df.mean(axis=1))
+    infected_df = infected_df.assign(I_total_mean=infected_df.mean(axis=1))
+    immune_df = immune_df.assign(M_total_mean=immune_df.mean(axis=1))
+
+    return susceptible_df, infected_df, immune_df
+
+
+##### PLOTTING THE RESULTS
+
+def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters):
+
+    # Creating a list of the dataframes
+    all_state_dfs = susceptible_df, infected_df, immune_df
+
+    # Creating a list for legend labels and plot colors
+    labels = ['Susceptible', 'Infectious', 'Immune']
+    colors = ['navy', 'firebrick', 'g']
+
+    # Initialising a figure
+    fig, ax = plt.subplots()
+
+    # Looping through the remaining results
+    for counter, df in enumerate(all_state_dfs):
+
+        # Plotting the rough data with transparent lines
+        df[df.columns[:-1]].plot(ax=ax, alpha=0.1, color=colors[counter], legend=False)
+
+        # Plotting the mean data with a solid line
+        df[df.columns[-1]].plot(ax=ax, color=colors[counter], linewidth=2, label=labels[counter], legend=True)
+
+    # Overplotting event times
+    for t, is_event_time in enumerate(events_df['event_occurred']):
+
+        # Plotting event if required
+        if is_event_time:
+            plt.vlines(x=t, ymin=0, ymax=N, linestyles='dashed')
+    
+    # Adding plot titles and legend
+    plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
+    plt.xlabel('Time (days)')
+    plt.ylabel('Population sizes')
+    plt.show()
 
 
 ##### MAIN
 
-# Repeating the simulation for a required number of iterations
-n_iterations = 1
-repeat_simulation(N=N, num_alive_nodes=N_alive, I0=I0, t_max=t_max, num_iterations=n_iterations)
+# Repeating the simulation
+repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+
+# Accessing the simulation parameters
+parameters_dict = get_simulation_parameters()
+
+# Creating useful dataframes
+results_df = get_results_dataframe()
+events_df = get_events_dataframe()
+susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
+
+# Plotting the data
+plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df, events_df=events_df, parameters=parameters_dict)
