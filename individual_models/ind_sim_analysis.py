@@ -35,6 +35,30 @@ def get_sorted_tree_edges(multi_tree):
 
 ##### TRANSMISSION TREE ANALYSIS
 
+def get_simulation_parameters(path):
+
+    # Creating a structure to store the simulation parameters
+    parameters_dict = dict()
+
+    # Locating all data files within the directory
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(path)]
+
+    # Opening the first file (all simulation repeats have the same basic parameters)
+    with open(sim_data_files[0], 'r') as in_file:
+
+        # Reading first line
+        data = in_file.readline().strip().split(',')
+
+    # Looping through tuples of the form (parameter_name, value)
+    for parameter_data in [parameter.split('=') for parameter in data]:
+        
+        # Storing the name and value
+        parameter_name, parameter_value = parameter_data
+        parameters_dict[parameter_name] = float(parameter_value)
+
+    return parameters_dict
+
+
 def get_infection_df(iter_num):
 
     # Determining input file name
@@ -279,48 +303,7 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
     return cross_tree
 
 
-################################################## ANALYSIS
-
-##### SECONDARY INFECTIONS ANAYSIS 
-
-def get_secondary_infections(multi_tree):
-
-    # Creating a structure to store the number of secondary infections by each node
-    secondary_infections_dict = dict()
-    
-    # Sorting the edges in order of increasing time
-    sorted_edges = get_sorted_tree_edges(multi_tree)
-    
-    # Looping through the edges in order of increasing time
-    for source_node, target_node, data in sorted_edges:
-    
-        # Checking in the node already exists within the dictionary 
-        if source_node in secondary_infections_dict.keys():
-
-            # Storing the infection of the current target node
-            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
-            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
-    
-        else:
-    
-            # Initialising secondary infections with new target node
-            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
-
-    return secondary_infections_dict
-
-
-def get_average_secondary_infections(second_infs_dict):
-
-    # Determining the secondary infections for all nodes
-    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
-
-    # Determining the average value
-    avg_seconday_infection = np.average(all_secondary_infections)
-
-    return avg_seconday_infection
-
-
-##### VARIANT ANALYSIS
+##### MODELLING VARIANT EMERGENCE
 
 def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8):
 
@@ -403,16 +386,94 @@ def get_trees(n=0):
     return inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree
     
 
-##### ANALYSING TREES
+##### ANALYSING TRANSMISSION DYNAMICS
 
-def get_R0_analysis(tree):
+def get_peak_infections(inf_df):
 
-    # Determining transmission tree R0
-    second_infections_dict = get_secondary_infections(transmission_tree)
-    avg_secondary_infection = get_average_secondary_infections(second_infections_dict)
+    # Determining all and peak infection totals
+    infection_totals = inf_df['I_total']
+    peak_infection = infection_totals.max()
 
-    return second_infections_dict, avg_secondary_infection
+    return infection_totals, peak_infection
+    
 
+def get_secondary_infections(multi_tree):
+
+    # Creating a structure to store the number of secondary infections by each node
+    secondary_infections_dict = dict()
+    
+    # Sorting the edges in order of increasing time
+    sorted_edges = get_sorted_tree_edges(multi_tree)
+    
+    # Looping through the edges in order of increasing time
+    for source_node, target_node, data in sorted_edges:
+    
+        # Checking in the node already exists within the dictionary 
+        if source_node in secondary_infections_dict.keys():
+
+            # Storing the infection of the current target node
+            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
+            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
+    
+        else:
+    
+            # Initialising secondary infections with new target node
+            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
+
+    return secondary_infections_dict
+
+
+def get_secondary_infections_analysis(tree):
+
+    # Determining seconday infections for all nodes
+    second_infs_dict = get_secondary_infections(tree)
+
+    # Extracting all secondary infections and determining the average secondary infection
+    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
+    avg_secondary_infection = np.average(all_secondary_infections)
+
+    return second_infs_dict, all_secondary_infections, avg_secondary_infection
+
+
+def get_clustering_analysis(multi_tree):
+
+    # Need to convert multi tree to directed graph to use clustering coefficients
+    weighted_tree = nx.DiGraph()
+    
+    # Iterating through the multigraph edges
+    for u, v, d in multi_tree.edges(data=True):
+
+        # Checking if the current edge already exists, if so increasing its weight by 1
+        if weighted_tree.has_edge(u, v):
+            weighted_tree[u][v]['weight'] += 1
+        
+        else:
+            # Adding the current edge
+            weighted_tree.add_edge(u, v, weight=1)
+
+    # Determining local clustering for all nodes and a list of the cluster values
+    local_clusters_dict = nx.clustering(weighted_tree)
+    all_clusters = np.array([cluster for (node, cluster) in local_clusters_dict.items()])
+
+    # Determining the global clustering coefficient
+    global_cluster = nx.average_clustering(weighted_tree)
+
+    return local_clusters_dict, all_clusters, global_cluster
+
+
+def get_degree_analysis(tree):
+
+    # Creating a dictionary of node degrees
+    degree_dict = {node: degree for (node, degree) in tree.degree()}
+
+    # Extracting all degrees and determining the average node degree
+    all_degrees = np.array([deg for (node, deg) in degree_dict.items()])
+    avg_degree = np.average(all_degrees)
+
+    return degree_dict, all_degrees, avg_degree
+
+    
+##### ANALYSING EVOLUTION
 
 def get_variant_analysis(sub_tree):
     
@@ -426,13 +487,25 @@ def get_variant_analysis(sub_tree):
 ################################################## MAIN
 
 # Looping through all simulations
-for n in range(n_iterations):
+for n in range(1):
+
+    # Accessing the simulation parameters
+    parameters_dict = get_simulation_parameters(complete_path)
 
     # Determining the relevant simulation trees and data
     inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(n)
 
-    # R0 analysis
-    second_infections_dict, avg_secondary_infection = get_R0_analysis(transmission_tree)
+    # Peak infection analysis
+    infection_totals, peak_infection = get_peak_infections(inf_df)
+    
+    # Secondary infection analysis
+    second_infections_dict, all_secondary_infections, avg_secondary_infection = get_secondary_infections_analysis(transmission_tree)
+
+    # Clustering analysis
+    local_clusters_dict, all_clusters, global_cluster = get_clustering_analysis(transmission_tree)
+
+    # Degree analysis
+    degree_dict, all_degrees, avg_degree = get_degree_analysis(transmission_tree)
 
     # Variant analysis
     snapshot_tree = get_variant_analysis(substitution_tree)
