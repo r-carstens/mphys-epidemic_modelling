@@ -22,6 +22,52 @@ immune = 'M'
 p_mutation = 0.3
 
 
+##### USEFUL HELPER FUNCTIONS
+
+def get_sorted_tree_edges(multi_tree):
+
+    # Sort edges based on the timestep values
+    sorted_edges = sorted(multi_tree.edges(data=True), key=lambda edge: edge[2]['timestep'])
+    return sorted_edges
+
+
+def get_secondary_infections(multi_tree):
+
+    # Creating a structure to store the number of secondary infections by each node
+    secondary_infections_dict = dict()
+    
+    # Sorting the edges in order of increasing time
+    sorted_edges = get_sorted_tree_edges(multi_tree)
+    
+    # Looping through the edges in order of increasing time
+    for source_node, target_node, data in sorted_edges:
+    
+        # Checking in the node already exists within the dictionary 
+        if source_node in secondary_infections_dict.keys():
+
+            # Storing the infection of the current target node
+            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
+            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
+    
+        else:
+    
+            # Initialising secondary infections with new target node
+            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
+
+    return secondary_infections_dict
+
+
+def get_average_secondary_infections(second_infs_dict):
+
+    # Determining the secondary infections for all nodes
+    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
+
+    # Determining the average value
+    avg_seconday_infection = np.average(all_secondary_infections)
+
+    return avg_seconday_infection
+
+
 ##### TRANSMISSION TREE ANALYSIS
 
 def get_infection_df(iter_num):
@@ -73,13 +119,6 @@ def get_transmission_tree(transmission_dict):
 
     return transmission_tree
 
-
-def get_sorted_tree_edges(multi_tree):
-
-    # Sort edges based on the timestep values
-    sorted_edges = sorted(multi_tree.edges(data=True), key=lambda edge: edge[2]['timestep'])
-    return sorted_edges
-    
 
 ##### MODELLING SUBSTITUTIONS ACROSS TREE
 
@@ -333,7 +372,7 @@ def get_variant_diversity(snapshot_tree):
         target_node = data['target_node']
 
 
-##### MAIN
+##### PRODUCING TREES
 
 # Reading all data that involved an infection from the results file and producing a transmission dictionary
 inf_df = get_infection_df(iter_num=0)
@@ -351,6 +390,12 @@ phylogenetic_tree = get_phylogenetic_tree(substitution_tree)
 # Producing the cross-immunity tree
 cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
 
+##### ANALYSING TREES
+
 # Analysing variant emergence
 snapshot_tree = get_snapshot_tree(substitution_tree)
 get_variant_diversity(snapshot_tree)
+
+# Determining transmission tree R0
+second_infections_dict = get_secondary_infections(transmission_tree)
+avg_secondary_infection = get_average_secondary_infections(second_infections_dict)
