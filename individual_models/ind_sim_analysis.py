@@ -495,10 +495,12 @@ for n in range(1):
     # Determining the relevant simulation trees and data
     inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(n)
 
+    ##### ANALYSING TRANSMISSION TREE
+    
     # Peak infection analysis
     infection_totals, peak_infection = get_peak_infections(inf_df)
     
-    # Secondary infection analysis
+    # Secondary infection (successor) analysis
     second_infections_dict, all_secondary_infections, avg_secondary_infection = get_secondary_infections_analysis(transmission_tree)
 
     # Clustering analysis
@@ -507,6 +509,5 @@ for n in range(1):
     # Degree analysis
     degree_dict, all_degrees, avg_degree = get_degree_analysis(transmission_tree)
 
-    # Variant analysis
-    snapshot_tree = get_variant_analysis(substitution_tree)
+    
     
