@@ -7,7 +7,8 @@ from tqdm import tqdm
 
 
 # Setting filename to be used for storing and reading data
-file_path = 'sim_with_hosts'
+mc_file_path = 'sim_with_hosts_mc'
+totals_file_path = 'sim_with_hosts_totals'
 event_path = 'host_events'
 
 # Setting the number of iteratino repeates
@@ -19,10 +20,10 @@ infected = 'I'
 immune = 'M'
 
 # Setting simulation data
-N = 100
+N = 1000
 N_alive = int(0.8 * N)
-I0 = 10
-t_max = 10000
+I0 = 1
+t_max = 250
 dt = 0.2
 
 # Setting epidemiological Parameters
@@ -34,7 +35,7 @@ p_birth = 0.05
 p_death = 0.001
 
 # Setting catastrophic events parameters
-kappa = 0.002
+kappa = 0.02
 omega = 0.2
 
 
@@ -232,34 +233,46 @@ def get_state_totals(G):
 
 def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
 
-    # Creating a file to store the results to
-    outfile = open(file_path + '_%s.txt' % (iter_num + 1), 'w')
-    outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
-    outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,n_births,n_deaths')
+    # Creating a file to store the mc results to
+    mc_outfile = open(mc_file_path + '_%s.txt' % (iter_num + 1), 'w')
+    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
+    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,n_births,n_deaths')
 
+    # Creating a file to store the total results to
+    totals_outfile = open(totals_file_path + '_%s.txt' % (iter_num + 1), 'w')
+    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
+    totals_outfile.write('\ntimestep,S_total,I_total,M_total')
+    
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
         # Updating host dynamics
         G, n_births = get_host_births(G)
         G, n_deaths = get_host_deaths(G, current_p_death=event_impact[t])
-        
-        # Completing an iteration step
-        G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
-        
-        # Updating network if required
-        if target_before != target_after:
-            G.nodes()[target_label]['state'] = target_after
 
-        # Counting the number of individuals in each state
-        S_total, I_total, M_total = get_state_totals(G)
+        # Looping through number of nodes
+        for n in range(G.number_of_nodes()):
+        
+            # Completing an iteration step
+            G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
+            
+            # Updating network if required
+            if target_before != target_after:
+                G.nodes()[target_label]['state'] = target_after
     
+            # Counting the number of individuals in each state
+            S_total, I_total, M_total = get_state_totals(G)
+        
+            # Logging the mcs results
+            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_births, n_deaths))
+
         # Logging total results
-        outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-        t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_births, n_deaths))
+        totals_outfile.write('\n%s,%s,%s,%s' % (t, S_total, I_total, M_total))
 
     # Closing the data file
-    outfile.close()
+    mc_outfile.close()
+    totals_outfile.close()
 
 
 def repeat_simulation(N, I0, t_max, num_iterations=1):
@@ -295,7 +308,7 @@ def get_simulation_parameters():
     parameters_dict = dict()
 
     # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(file_path)]
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path)]
 
     # Opening the first file (all simulation repeats have the same basic parameters)
     with open(sim_data_files[0], 'r') as in_file:
@@ -326,7 +339,7 @@ def get_results_dataframe():
     results_df = pd.DataFrame()
 
     # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(file_path)]
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path)]
 
     # Looping through each data file
     for counter, file in enumerate(sim_data_files):
