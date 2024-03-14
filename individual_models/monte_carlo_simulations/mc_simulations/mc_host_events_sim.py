@@ -23,7 +23,7 @@ immune = 'M'
 N = 1000
 N_alive = int(0.8 * N)
 I0 = 1
-t_max = 250
+t_max = 100
 dt = 0.2
 
 # Setting epidemiological Parameters
@@ -32,7 +32,7 @@ sigma = 0
 
 # Setting vital parameters
 p_birth = 0.05
-p_death = 0.001
+p_death = 0.01
 
 # Setting catastrophic events parameters
 kappa = 0.02
