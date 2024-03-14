@@ -23,7 +23,7 @@ immune = 'M'
 N = 1000
 N_alive = int(0.8 * N)
 I0 = 1
-t_max = 100
+t_max = 250
 dt = 0.2
 
 # Setting epidemiological Parameters
@@ -32,7 +32,7 @@ sigma = 0
 
 # Setting vital parameters
 p_birth = 0.05
-p_death = 0.01
+p_death = 0.02
 
 # Setting catastrophic events parameters
 kappa = 0.02
@@ -121,49 +121,30 @@ def get_event_impact(sim_time, event_times):
 
 ##### RUNNING THE SIMULATION
 
-def get_host_births(G):
+def get_potential_birth(G, node):
 
-    # Setting counter to determine number of births
-    n_births = 0
+    # Checking if it becomes reborn
+    check_for_birth = np.random.uniform() < p_birth
 
-    # Determining the labels of dead nodes
-    all_dead_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'dead']
+    # Updating node if required
+    if check_for_birth:
+        
+        # Updating node parameters
+        G.nodes()[node]['vitals'] = 'alive'
+        G.nodes()[node]['state'] = susceptible
 
-    # Looping through each dead node
-    for node in all_dead_nodes:
-
-        # Checking if it becomes reborn
-        if np.random.uniform() < p_birth:
-
-            # Updating node parameters
-            G.nodes()[node]['vitals'] = 'alive'
-            G.nodes()[node]['state'] = susceptible
-
-            # Incrementing birth count
-            n_births += 1
-
-    return G, n_births
+    return G, int(check_for_birth)
 
 
-def get_host_deaths(G, current_p_death):
+def get_potential_death(G, node, current_p_death):
 
-    # Setting counter to hold number of deaths
-    n_deaths = 0
+    # Checking if node dies
+    check_for_death = np.random.uniform() < current_p_death
 
-    # Determining the labels of living nodes
-    all_living_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive']
-    
-    # Looping through each living node
-    for node in all_living_nodes:
+    # Updating the node if required
+    G.nodes()[node]['vitals'] = 'dead'
 
-        # Checking if it dies
-        if np.random.uniform() < current_p_death:
-
-            # Updating parameters
-            G.nodes()[node]['vitals'] = 'dead'
-            n_deaths +=1
-
-    return G, n_deaths
+    return G, int(check_for_death)
 
 
 def check_for_infection(G, source_label, target_label, reinfection):
@@ -236,23 +217,36 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_%s.txt' % (iter_num + 1), 'w')
     mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
-    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total,n_births,n_deaths')
+    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_%s.txt' % (iter_num + 1), 'w')
     totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
-    totals_outfile.write('\ntimestep,S_total,I_total,M_total')
+    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths')
     
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
-        # Updating host dynamics
-        G, n_births = get_host_births(G)
-        G, n_deaths = get_host_deaths(G, current_p_death=event_impact[t])
+        # Initialising variables to count births and deaths
+        n_births = n_deaths = 0
 
         # Looping through number of nodes
-        for n in range(G.number_of_nodes()):
-        
+        for node in range(G.number_of_nodes()):
+
+            # Checking if the node is dead
+            if G.nodes()[node]['vitals'] == 'dead':
+
+                # Updating if a birth occurs and updating counter if required
+                G, check_for_birth = get_potential_birth(G, node)
+                n_births += check_for_birth
+
+            # Checking if the node is alive
+            else:
+
+                # Updating if a death occurs and updating counter if required
+                G, check_for_death = get_potential_death(G, node, event_impact[t])
+                n_deaths += check_for_death
+
             # Completing an iteration step
             G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
             
@@ -264,11 +258,11 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
             S_total, I_total, M_total = get_state_totals(G)
         
             # Logging the mcs results
-            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_births, n_deaths))
+            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
         # Logging total results
-        totals_outfile.write('\n%s,%s,%s,%s' % (t, S_total, I_total, M_total))
+        totals_outfile.write('\n%s,%s,%s,%s,%s,%s' % (t, S_total, I_total, M_total, n_births, n_deaths))
 
     # Closing the data file
     mc_outfile.close()
