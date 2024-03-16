@@ -249,34 +249,44 @@ def get_immunity_probability(dist):
     return 1 / (1 + np.exp(dist))
 
 
+def get_initialised_cross_immunity_tree(sub_tree):
+
+    # Creating a structure to store the kept parts of the sub tree
+    cross_tree = nx.MultiDiGraph()
+
+    # Looping through nodes in sub tree
+    for node_label, data in sub_tree.nodes(data=True):
+
+        # Adding all node data from sub tree into cross tree
+        cross_tree.add_node(node_label)
+        cross_tree.nodes[node_label].update(data)
+
+    return cross_tree
+
+
 def get_cross_immunity_tree(sub_tree, phylo_tree):
 
-    # Copying the substitution tree and sorting edges in order of increasing time
-    cross_tree = sub_tree.copy()
+    # Creating the cross tree with all node data from sub tree, but no edges
+    cross_tree = get_initialised_cross_immunity_tree(sub_tree)
+
+    # Sorting the substitution tree in order of increasing time
     sorted_sub_edges = get_sorted_tree_edges(sub_tree)
 
-    # Creating a structure to store when nodes are removed
-    removed_nodes = []
-    
     # Looping through the edges in order of increasing time
     for source_label, target_label, data in sorted_sub_edges:
 
         # Extracting data from the current event
         timestep, reinfection_occurred, substitution_occurred = [value for key, value in data.items()]
 
-        # Removing current event if source label has already been removed
-        if source_label in removed_nodes:
-            cross_tree.remove_edge(source_label, target_label)
+        # Finding the corresponding node in the cross-immunity tree
+        target_node_data = sub_tree.nodes(data=True)[target_label]
+            
+        # Extracting all pathogens encountered by the node
+        pathogen_history = target_node_data['pathogen_history']
+        new_pathogen = pathogen_history[timestep]
 
         # Checking if event was a reinfection
         if reinfection_occurred:
-
-            # Finding the corresponding node in the cross-immunity tree
-            target_node_data = sub_tree.nodes(data=True)[target_label]
-            
-            # Extracting all pathogens encountered by the node
-            pathogen_history = target_node_data['pathogen_history']
-            new_pathogen = pathogen_history[timestep]
 
             # Determining the distance to each previously encountered pathogen
             prev_pathogens, phylo_dists = get_previous_pathogens(path_hist=pathogen_history, new_path=new_pathogen, t=timestep, phylo_tree=phylo_tree)
@@ -285,12 +295,21 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
             shortest_dist = np.min(phylo_dists)
             immunity_prob = get_immunity_probability(dist=shortest_dist)
 
-            # Testing if the node is immune
+            # Testing if the node is not immune (i.e. they are infected and the onward infections are kept)
             if np.random.uniform() < immunity_prob:
 
-                # Labelling all successors as removed as of the current timestep
-                for successor in list(sub_tree.successors(target_label)):
-                    removed_nodes.append(successor)
+                # Adding an edge between the current source and target nodes and attributing the timestep
+                cross_tree.add_edge(source_label, target_label, timestep=timestep, was_reinfection=reinfection_occurred,
+                                    substitution_occurred=substitution_occurred)
+
+            # Removing onward edges
+            #else:
+
+        else:
+
+            # Adding an edge between the current source and target nodes and attributing the timestep
+            cross_tree.add_edge(source_label, target_label, timestep=timestep, was_reinfection=reinfection_occurred,
+                                substitution_occurred=substitution_occurred)
 
     return cross_tree
 
@@ -481,17 +500,17 @@ def get_variant_analysis(substitution_tree, cross_tree):
 
     # Determining origin nodes for the substitution and cross-immunity trees
     sub_origin_nodes = get_variant_predecessors(substitution_tree)
-    # cross_origin_nodes = get_variant_predecessors(cross_tree)
+    cross_origin_nodes = get_variant_predecessors(cross_tree)
 
     # Determining the proportion that each variant occurrs
     sub_variant_props = get_variant_proportions(sub_origin_nodes)
-    # cross_variant_props = get_variant_proportions(cross_origin_nodes)
+    cross_variant_props = get_variant_proportions(cross_origin_nodes)
 
     # Accessing the different diversity measures
     sub_div_q0, sub_div_q1, sub_div_q3 = get_all_variant_diversity_numbers(sub_variant_props)
-    # cross_div_q0, cross_div_q1, cross_div_q3 = get_all_variant_diversity_numbers(cross_variant_props)
+    cross_div_q0, cross_div_q1, cross_div_q3 = get_all_variant_diversity_numbers(cross_variant_props)
 
-    return np.array([sub_div_q0, sub_div_q1, sub_div_q3]), np.array([0, 0, 0])
+    return np.array([sub_div_q0, sub_div_q1, sub_div_q3]), np.array([cross_div_q0, cross_div_q1, cross_div_q3])
 
 
 ################################################## MAIN
