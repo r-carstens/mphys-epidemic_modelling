@@ -7,11 +7,9 @@ import matplotlib.pyplot as plt
 import string
 import os
 
-# Setting input filename
-complete_path = 'complete_without_events'
-
-# Setting number of files to analyse
-n_iterations = 10
+# Setting filename to be used for storing and reading data
+mc_file_path = 'sim_with_hosts_mc'
+event_path = 'host_events'
 
 # Initialising possible infection states
 susceptible = 'S'
@@ -35,16 +33,13 @@ def get_sorted_tree_edges(multi_tree):
 
 ##### TRANSMISSION TREE ANALYSIS
 
-def get_simulation_parameters(path):
+def get_simulation_parameters(first_file):
 
-    # Creating a structure to store the simulation parameters
+    # Initialising dictionary to hold results
     parameters_dict = dict()
 
-    # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(path)]
-
     # Opening the first file (all simulation repeats have the same basic parameters)
-    with open(sim_data_files[0], 'r') as in_file:
+    with open(first_file, 'r') as in_file:
 
         # Reading first line
         data = in_file.readline().strip().split(',')
@@ -59,13 +54,10 @@ def get_simulation_parameters(path):
     return parameters_dict
 
 
-def get_infection_df(iter_num):
+def get_infection_df(first_file):
 
-    # Determining input file name
-    in_file = complete_path + '_%s.txt' % (iter_num + 1)
-    
     # Importing transmission data and only retaining infection events
-    df = pd.read_csv(in_file, delimiter=',', skiprows=1)
+    df = pd.read_csv(first_file, delimiter=',', skiprows=1)
     infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'].isin([susceptible, immune])) & (df['target_after'] == infected)]
 
     return infection_df
@@ -305,11 +297,14 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
 
 ##### MODELLING VARIANT EMERGENCE
 
-def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8):
+def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8, delta_t_percent=0.2):
 
     # Determining all event timesteps and the number of events
     all_timesteps = [data['timestep'] for source_label, target_label, data in sorted_tree_edges]
     n_timesteps = len(all_timesteps)
+
+    # Determining the timewindow reach
+    delta_t = int(delta_t_percent * n_timesteps)
 
     # Determining when the time intervals will be set
     t1 = int(t1_percent * n_timesteps)
@@ -319,56 +314,104 @@ def get_time_intervals(sorted_tree_edges, t1_percent=0.2, t2_percent=0.8):
     t1_step = all_timesteps[t1]
     t2_step = all_timesteps[t2]
 
-    return t1_step, t2_step
+    return t1_step, t2_step, delta_t
+    
+    
+def get_snapshot_pathogen_history(target_path_hist, t2_step, delta_t):
 
+    # Creating a variable to store the restricted data
+    restricted_pathogen_data = dict()
 
-def get_snapshot_tree(tree):
-
-    # Creating a dictionary to store all event timesteps, sources, and target nodes within the snapshot
-    snapshot_dict = dict()
-
-    # Sorting the tree in order of increasing time
-    sorted_tree_edges = get_sorted_tree_edges(tree)
-
-    # Determining the timesteps to cut the tree at
-    t1_step, t2_step = get_time_intervals(sorted_tree_edges)
-
-    # Removing all events before the first timestep
-    for source_label, target_label, data in sorted_tree_edges:
-        
-        # Extracting data from the current event
-        timestep, reinfection_occurred, substitution_occurred = [value for key, value in data.items()]
+    # Looping through the path data
+    for time, pathogen in target_path_hist.items():
 
         # Checking if the current transmission falls within the time snapshot
-        if t1_step <= timestep <= t2_step:
+        if (t2_step - delta_t) <= time <= (t2_step + delta_t):
 
-            # Determining the current source and target nodes
-            current_source_node = tree.nodes(data=True)[source_label]
-            current_target_node = tree.nodes(data=True)[target_label]
+            # Storing the result
+            restricted_pathogen_data[time] = pathogen
 
-            # Storing the data
-            snapshot_dict[timestep] = {'source_node': current_source_node, 'target_node': current_target_node}
-
-    return snapshot_dict
-
-
-def get_variant_diversity(snapshot_tree):
+    return restricted_pathogen_data
     
-    for key, data in snapshot_tree.items():
 
-        # Extracting the source and target node data
-        source_node = data['source_node']
-        target_node = data['target_node']
+def get_final_t_data(path_history, t2_step):
+
+    # Creating a struture to store which pathogen the host was infected with at t2
+    final_t, path_at_t2 = -1, ''
+
+    # Looping through the target node's pathogen history
+    for path_t, path_name in path_history.items():
+
+        # Checking if the current transmission occurred before t2
+        if path_t < t2_step:
+
+            # Saving the current details
+            final_t = path_t
+            path_at_t2 = path_name
+
+    return final_t, path_at_t2
 
 
+def get_predecessor_node(substitution_tree, final_t, target_label):
+
+    # Initialising variable to store the found predecessor
+    found_sorce_label = -1
+    
+    # Looping through all edges
+    for temp_source_label, temp_target_label, temp_data in substitution_tree.edges(data=True):
+    
+        # Checking if the target label and timestep match
+        if temp_data['timestep'] == final_t and temp_target_label == target_label:
+            found_source_label = temp_source_label
+
+    return found_source_label
+
+
+def get_variant_predecessors():
+
+    # Creating a structure to store which nodes infected others
+    origin_nodes = dict()
+    
+    # Sorting the tree in order of increasing time
+    sorted_tree_edges = get_sorted_tree_edges(tree)
+    
+    # Determining the timesteps to cut the tree at
+    t1_step, t2_step, delta_t = get_time_intervals(sorted_tree_edges)
+    
+    # Reversing the tree order to go back in time 
+    reversed_sorted_tree_edges = list(reversed(sorted_tree_edges))
+    
+    # Looping through sorted tree edges
+    for source_label, target_label, data in reversed_sorted_tree_edges:
+        
+        # Extracting the target node data
+        target_path_hist = substitution_tree.nodes(data=True)[target_label]['pathogen_history']
+    
+        # Determining which pathogen the node was infectious with at time t2
+        final_t, path_at_t2 = get_final_t_data(target_path_hist, t2_step)
+    
+        # Finding the source node 
+        found_source = get_predecessor_node(substitution_tree, final_t, target_label)
+        
+        # Checking if the source already exists in the dictionary
+        if found_source in origin_nodes:
+            origin_nodes[found_source].append(target_label)
+        
+        # Initialising the data
+        else:
+            origin_nodes[found_source] = [target_label]
+
+    return origin_nodes
+    
+    
 ################################################## REPEATED MEASUREMENTS
 
 ##### PRODUCING TREES
 
-def get_trees(n=0):
+def get_trees(first_file):
 
     # Reading all data that involved an infection from the results file and producing a transmission dictionary
-    inf_df = get_infection_df(iter_num=n)
+    inf_df = get_infection_df(first_file)
     transmission_dict = get_transmission_dict(inf_df)
     
     # Producing the transmission tree
@@ -384,130 +427,17 @@ def get_trees(n=0):
     cross_tree = get_cross_immunity_tree(substitution_tree, phylogenetic_tree)
 
     return inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree
-    
-
-##### ANALYSING TRANSMISSION DYNAMICS
-
-def get_peak_infections(inf_df):
-
-    # Determining all and peak infection totals
-    infection_totals = inf_df['I_total']
-    peak_infection = infection_totals.max()
-
-    return infection_totals, peak_infection
-    
-
-def get_secondary_infections(multi_tree):
-
-    # Creating a structure to store the number of secondary infections by each node
-    secondary_infections_dict = dict()
-    
-    # Sorting the edges in order of increasing time
-    sorted_edges = get_sorted_tree_edges(multi_tree)
-    
-    # Looping through the edges in order of increasing time
-    for source_node, target_node, data in sorted_edges:
-    
-        # Checking in the node already exists within the dictionary 
-        if source_node in secondary_infections_dict.keys():
-
-            # Storing the infection of the current target node
-            secondary_infections_dict[source_node]['nodes_infected'].append(target_node)
-            secondary_infections_dict[source_node]['no_secondary_infections'] += 1
-    
-        else:
-    
-            # Initialising secondary infections with new target node
-            secondary_infections_dict[source_node] = {'nodes_infected': [target_node], 'no_secondary_infections': 1}
-
-    return secondary_infections_dict
-
-
-def get_secondary_infections_analysis(tree):
-
-    # Determining seconday infections for all nodes
-    second_infs_dict = get_secondary_infections(tree)
-
-    # Extracting all secondary infections and determining the average secondary infection
-    all_secondary_infections = np.array([data['no_secondary_infections'] for source_node, data in second_infs_dict.items()])
-    avg_secondary_infection = np.average(all_secondary_infections)
-
-    return second_infs_dict, all_secondary_infections, avg_secondary_infection
-
-
-def get_clustering_analysis(multi_tree):
-
-    # Need to convert multi tree to directed graph to use clustering coefficients
-    weighted_tree = nx.DiGraph()
-    
-    # Iterating through the multigraph edges
-    for u, v, d in multi_tree.edges(data=True):
-
-        # Checking if the current edge already exists, if so increasing its weight by 1
-        if weighted_tree.has_edge(u, v):
-            weighted_tree[u][v]['weight'] += 1
-        
-        else:
-            # Adding the current edge
-            weighted_tree.add_edge(u, v, weight=1)
-
-    # Determining local clustering for all nodes and a list of the cluster values
-    local_clusters_dict = nx.clustering(weighted_tree)
-    all_clusters = np.array([cluster for (node, cluster) in local_clusters_dict.items()])
-
-    # Determining the global clustering coefficient
-    global_cluster = nx.average_clustering(weighted_tree)
-
-    return local_clusters_dict, all_clusters, global_cluster
-
-
-def get_degree_analysis(tree):
-
-    # Creating a dictionary of node degrees
-    degree_dict = {node: degree for (node, degree) in tree.degree()}
-
-    # Extracting all degrees and determining the average node degree
-    all_degrees = np.array([deg for (node, deg) in degree_dict.items()])
-    avg_degree = np.average(all_degrees)
-
-    return degree_dict, all_degrees, avg_degree
-
-    
-##### ANALYSING EVOLUTION
-
-def get_variant_analysis(sub_tree):
-    
-    # Analysing variant emergence
-    snapshot_tree = get_snapshot_tree(sub_tree)
-    get_variant_diversity(snapshot_tree)
-
-    return snapshot_tree
 
 
 ################################################## MAIN
 
-# Looping through all simulations
-for n in range(1):
+# Finding all files
+sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(mc_file_path)]
+first_file = sim_data_files[0]
 
-    # Accessing the simulation parameters
-    parameters_dict = get_simulation_parameters(complete_path)
+# Accessing the simulation parameters
+parameters_dict = get_simulation_parameters(first_file)
 
-    # Determining the relevant simulation trees and data
-    inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(n)
-
-    ##### ANALYSING TRANSMISSION TREE
-    
-    # Peak infection analysis
-    infection_totals, peak_infection = get_peak_infections(inf_df)
-    
-    # Secondary infection (successor) analysis
-    second_infections_dict, all_secondary_infections, avg_secondary_infection = get_secondary_infections_analysis(transmission_tree)
-
-    # Clustering analysis
-    local_clusters_dict, all_clusters, global_cluster = get_clustering_analysis(transmission_tree)
-
-    # Degree analysis
-    degree_dict, all_degrees, avg_degree = get_degree_analysis(transmission_tree)
-
-    
-    
+# Determining the relevant simulation trees and data
+inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(first_file)
+  
