@@ -367,7 +367,7 @@ def get_predecessor_node(substitution_tree, final_t, target_label):
     return found_source_label
 
 
-def get_variant_predecessors():
+def get_variant_predecessors(tree):
 
     # Creating a structure to store which nodes infected others
     origin_nodes = dict()
@@ -395,7 +395,10 @@ def get_variant_predecessors():
         
         # Checking if the source already exists in the dictionary
         if found_source in origin_nodes:
-            origin_nodes[found_source].append(target_label)
+
+            # Checking if the target label is already stored (nb: tested this, it is a bug due to using the multi graph, not a mistake)
+            if target_label not in origin_nodes[found_source]:
+                origin_nodes[found_source].append(target_label)
         
         # Initialising the data
         else:
@@ -403,10 +406,55 @@ def get_variant_predecessors():
 
     return origin_nodes
     
-    
-################################################## REPEATED MEASUREMENTS
 
-##### PRODUCING TREES
+def get_variant_proportions(origin_nodes):
+
+    # Creating structures to store the source label name and number of onward infections caused
+    source_labels = np.array(list(origin_nodes.keys()))
+    no_infections_caused = np.zeros(shape=source_labels.shape)
+
+    # Looping through the dictionary
+    for counter, (key, data) in enumerate(origin_nodes.items()):
+
+        # Storing the number of infections caused
+        no_infections_caused[counter] = len(data)
+
+    # Normalising the result to get proportions
+    proportion_infections = no_infections_caused / len(no_infections_caused)
+
+    return proportion_infections
+
+
+def get_effective_number(prop_infections, q=2):
+
+    # Initialising diversity variable
+    diversity = 0
+
+    # Checking if q=1 (this cannot be calculated using the Hill equation exactly, needs limit taken)
+    if q == 1:
+
+        # Determining exp of shannon entropy
+        diversity = np.exp(-np.sum(prop_infections * np.log(prop_infections)))
+
+    else:
+
+        # Determining the effective number for the chosen q value
+        diversity = (np.sum(prop_infections**q))**(1/(1-q))
+
+    return diversity
+
+
+def get_all_variant_diversity_numbers(prop_infections):
+
+    # Determining the different diversity measures
+    div_q0 = get_effective_number(prop_infections, q=0)
+    div_q1 = get_effective_number(prop_infections, q=1)
+    div_q2 = get_effective_number(prop_infections, q=2)
+
+    return div_q0, div_q1, div_q2
+
+
+################################################## REPEATED MEASUREMENTS
 
 def get_trees(first_file):
 
@@ -429,6 +477,23 @@ def get_trees(first_file):
     return inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree
 
 
+def get_variant_analysis(substitution_tree, cross_tree):
+
+    # Determining origin nodes for the substitution and cross-immunity trees
+    sub_origin_nodes = get_variant_predecessors(substitution_tree)
+    # cross_origin_nodes = get_variant_predecessors(cross_tree)
+
+    # Determining the proportion that each variant occurrs
+    sub_variant_props = get_variant_proportions(sub_origin_nodes)
+    # cross_variant_props = get_variant_proportions(cross_origin_nodes)
+
+    # Accessing the different diversity measures
+    sub_div_q0, sub_div_q1, sub_div_q3 = get_all_variant_diversity_numbers(sub_variant_props)
+    # cross_div_q0, cross_div_q1, cross_div_q3 = get_all_variant_diversity_numbers(cross_variant_props)
+
+    return np.array([sub_div_q0, sub_div_q1, sub_div_q3]), np.array([0, 0, 0])
+
+
 ################################################## MAIN
 
 # Finding all files
@@ -439,5 +504,7 @@ first_file = sim_data_files[0]
 parameters_dict = get_simulation_parameters(first_file)
 
 # Determining the relevant simulation trees and data
-inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_tree = get_trees(first_file)
-  
+inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_immunity_tree = get_trees(first_file)
+
+# Analysising the variants
+sub_diversities, cross_diversities = get_variant_analysis(substitution_tree, cross_immunity_tree)
