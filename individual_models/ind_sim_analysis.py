@@ -249,67 +249,89 @@ def get_immunity_probability(dist):
     return 1 / (1 + np.exp(dist))
 
 
-def get_initialised_cross_immunity_tree(sub_tree):
+def get_edge_removals(sub_tree, phylo_tree):
 
-    # Creating a structure to store the kept parts of the sub tree
+    # Creating structures to store the cross immunity tree and data on which nodes have had pathogens removed
     cross_tree = nx.MultiDiGraph()
-
-    # Looping through nodes in sub tree
-    for node_label, data in sub_tree.nodes(data=True):
-
-        # Adding all node data from sub tree into cross tree
-        cross_tree.add_node(node_label)
-        cross_tree.nodes[node_label].update(data)
-
-    return cross_tree
-
-
-def get_cross_immunity_tree(sub_tree, phylo_tree):
-
-    # Creating the cross tree with all node data from sub tree, but no edges
-    cross_tree = get_initialised_cross_immunity_tree(sub_tree)
-
-    # Sorting the substitution tree in order of increasing time
-    sorted_sub_edges = get_sorted_tree_edges(sub_tree)
+    removed_node_data = dict()
 
     # Looping through the edges in order of increasing time
-    for source_label, target_label, data in sorted_sub_edges:
+    for source_label, target_label, data in get_sorted_tree_edges(sub_tree):
 
         # Extracting data from the current event
         timestep, reinfection_occurred, substitution_occurred = [value for key, value in data.items()]
 
-        # Finding the corresponding node in the cross-immunity tree
-        target_node_data = sub_tree.nodes(data=True)[target_label]
-            
-        # Extracting all pathogens encountered by the node
-        pathogen_history = target_node_data['pathogen_history']
-        new_pathogen = pathogen_history[timestep]
+        # Checking if the source node has already been removed, in which case the target can't have been infected and so is removed
+        if source_label in removed_node_data:
 
-        # Checking if event was a reinfection
-        if reinfection_occurred:
-
-            # Determining the distance to each previously encountered pathogen
-            prev_pathogens, phylo_dists = get_previous_pathogens(path_hist=pathogen_history, new_path=new_pathogen, t=timestep, phylo_tree=phylo_tree)
+            # Checking if there is already data on the current node (only want to keep the initial removal timestep)
+            if target_label not in removed_node_data:
+                removed_node_data[target_label] = timestep
             
-            # Finding the shortest distance and immunity probability
+        # Checking if the event was a reinfection, in which case cross immunity may occur
+        elif reinfection_occurred:
+
+            # Extracting the target pathogen history and the potential new pathogen
+            target_path_hist = sub_tree.nodes(data=True)[target_label]['pathogen_history']
+            new_pathogen = target_path_hist[timestep]
+
+            # Determining the shortest of the distances to each previously encountered pathogen
+            prev_pathogens, phylo_dists = get_previous_pathogens(path_hist=target_path_hist, new_path=new_pathogen, t=timestep, phylo_tree=phylo_tree)
             shortest_dist = np.min(phylo_dists)
-            immunity_prob = get_immunity_probability(dist=shortest_dist)
 
-            # Testing if the node is not immune (i.e. they are infected and the onward infections are kept)
-            if np.random.uniform() < immunity_prob:
+            # If the node is immune, the edge is not added and its removal time is stored
+            if np.random.uniform() < get_immunity_probability(dist=shortest_dist):
+                
+                # Checking if there is already data on the current node (only want to keep the initial removal timestep)
+                if target_label not in removed_node_data:
+                    removed_node_data[target_label] = timestep
 
-                # Adding an edge between the current source and target nodes and attributing the timestep
+            # If the node is not immune, it stays within the tree
+            else:
                 cross_tree.add_edge(source_label, target_label, timestep=timestep, was_reinfection=reinfection_occurred,
-                                    substitution_occurred=substitution_occurred)
-
-            # Removing onward edges
-            #else:
-
+                                substitution_occurred=substitution_occurred)
+                
+        # Checking if the event was an initial infection, in which case the data is unchanged
         else:
-
-            # Adding an edge between the current source and target nodes and attributing the timestep
             cross_tree.add_edge(source_label, target_label, timestep=timestep, was_reinfection=reinfection_occurred,
                                 substitution_occurred=substitution_occurred)
+
+    return cross_tree, removed_node_data
+
+
+def get_node_pathogen_removals(cross_tree, sub_tree, removed_node_data):
+
+    # Looping through all removed nodes
+    for node_label, removed_timestep in removed_node_data.items():
+
+        # Checking if the node is in the cross tree (nodes with one edge may have been completely removed if the source was removed)
+        if cross_tree.has_node(node_label):
+
+            # Extracting the node's unedited pathogen history (from the sub tree) and making an updated copy
+            node_path_history = sub_tree.nodes(data=True)[node_label]['pathogen_history']
+            updated_node_path_history = node_path_history.copy()
+
+            # Looping through the history
+            for path_t, path_name in node_path_history.items():
+    
+                # Removing pathogen data if the pathogen was trasmitted after the node was removed
+                if path_t >= removed_timestep:
+                    del updated_node_path_history[path_t]
+    
+            # Replacing cross tree node with new data (current pathogen isn't used, but I noticed it too late to debug and remove it)
+            cross_tree.nodes[node_label]['current_pathogen_name'] = sub_tree.nodes(data=True)[node_label]['current_pathogen_name']
+            cross_tree.nodes[node_label]['pathogen_history'] = updated_node_path_history
+
+    return cross_tree
+
+    
+def get_cross_immunity_tree(sub_tree, phylo_tree):
+
+    # Removing the edges for cross-immune events and determining which node pathogen histories require changes
+    cross_tree, removed_node_data = get_edge_removals(sub_tree, phylo_tree)
+    
+    # Applying the pathogen history updates
+    cross_tree = get_node_pathogen_removals(cross_tree, sub_tree, removed_node_data)
 
     return cross_tree
 
@@ -473,7 +495,7 @@ def get_all_variant_diversity_numbers(prop_infections):
     return div_q0, div_q1, div_q2
 
 
-################################################## REPEATED MEASUREMENTS
+################################################## MAIN FUNCTIONS
 
 def get_trees(first_file):
 
