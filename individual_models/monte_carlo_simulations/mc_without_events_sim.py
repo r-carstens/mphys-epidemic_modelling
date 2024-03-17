@@ -16,7 +16,7 @@ infected = 'I'
 immune = 'M'
 
 # Setting population data
-N = 500
+N = 100
 N_alive = int(1 * N)
 I0 = 1
 
@@ -232,7 +232,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
         for n in range(G.number_of_nodes()):
 
             # Checking if dead node is reborn
-            if G.nodes()[n]['vitals'] == 'alive':
+            if G.nodes()[n]['vitals'] == 'dead':
                 G, is_birth = get_potential_node_birth(G, n)
                 n_births += is_birth
 
@@ -394,7 +394,7 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, parameters):
     plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
     plt.xlabel('Time (days)')
     plt.ylabel('Population sizes')
-    plt.show()
+    plt.savefig('simulation_N-%s_sigma-%s.png')
 
 
 ##### MAIN
