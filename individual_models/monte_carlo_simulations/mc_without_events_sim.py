@@ -10,42 +10,46 @@ from tqdm import tqdm
 mc_file_path = 'sim_no_events_mc'
 totals_file_path = 'sim_no_events_totals'
 
-# Setting the number of iteratino repeates
-n_iterations = 1
-
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
 immune = 'M'
 
-# Setting simulation data
-N = 1000
+# Setting population data
+N = 500
 N_alive = int(0.8 * N)
 I0 = 1
-t_max = 100
-dt = 0.2
+
+# Setting simulation data
+n_iterations = 10
+t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
-gamma = 0.1
+gamma = 1/7
 sigma = 0
 
 # Setting vital parameters
-p_birth = 0.05
-p_death = 0.01
+mu_B = 0.15
+mu_D = 0.07
 
 
 ##### NETWORK INITIALISATION
 
-def get_mosquito_transmission():
+def get_mosquito_transmission_rate():
 
-    a = np.random.uniform(low=0.1, high=2)     # rate at which a human is bitten by a mosquito
-    b = np.random.uniform(low=0.1, high=1)     # proportion of infected bites that cause infection in the human host
-    c = np.random.uniform(low=0.1, high=1)     # transmission efficiency from humans to mosquitoes
-    m = np.random.uniform(low=0, high=50)      # number of mosquitoes in the region per human
-    mu = np.random.uniform(low=10, high=60)    # life expectancy of mosquitoes
+    m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
+    a = np.random.uniform(low=0, high=5)             # rate at which a human is bitten by a mosquito
+    b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
+    c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
+    life_exp = np.random.uniform(low=1/21, high=1/7)  # life expectancy of mosquitoes
 
-    # return (a ** 2 * b * c * m) / mu
-    return 0.5
+    return (m * a**2 * b * c) * life_exp
+
+
+def get_mosquito_transmission_probabilitity(rate):
+
+    # Assuming exponentially-distributed
+    return 1 - np.exp(-rate * dt)
 
 
 def initialise_graph(n_nodes, n_alive):
@@ -67,8 +71,12 @@ def initialise_graph(n_nodes, n_alive):
     # Looping through all edges
     for u, v in G.edges():
 
+        # Determining the mosquito transmission rate and probability
+        m_rate = get_mosquito_transmission_rate()
+        m_prob = get_mosquito_transmission_probabilitity(m_rate)
+
         # Adding weights to the edges to represent mosquito transmission
-        G[u][v]['weight'] = get_mosquito_transmission()
+        G[u][v]['weight'] = m_prob
 
     return G
 
@@ -97,49 +105,35 @@ def initialise_infections(G, n_nodes, n_infected):
 
 ##### RUNNING THE SIMULATION
 
-def get_host_births(G):
+def get_potential_node_birth(G, node_label):
 
-    # Setting counter to determine number of births
-    n_births = 0
+    # Determining the current birth probability
+    p_birth = 1 - np.exp(-mu_B * dt)
 
-    # Determining the labels of dead nodes
-    all_dead_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'dead']
+    # Determining whether a birth occurred
+    has_birth_occurred = np.random.uniform() < p_birth
 
-    # Looping through each dead node
-    for node in all_dead_nodes:
-
-        # Checking if it becomes reborn
-        if np.random.uniform() < p_birth:
-
-            # Updating node parameters
-            G.nodes()[node]['vitals'] = 'alive'
-            G.nodes()[node]['state'] = susceptible
-
-            # Incrementing birth count
-            n_births += 1
-
-    return G, n_births
+    # Updating node if birth occurred
+    if has_birth_occurred:
+        G.nodes()[node_label]['vitals'] = 'alive'
+        G.nodes()[node_label]['state'] == susceptible
+        
+    return G, int(has_birth_occurred)
 
 
-def get_host_deaths(G):
+def get_potential_node_death(G, node_label):
 
-    # Setting counter to hold number of deaths
-    n_deaths = 0
+    # Determining the current death probability
+    p_death = 1 - np.exp(-mu_D * dt)
 
-    # Determining the labels of living nodes
-    all_living_nodes = [node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive']
-    
-    # Looping through each living node
-    for node in all_living_nodes:
+    # Determining whether a death occurred
+    has_death_occurred = np.random.uniform() < p_death
 
-        # Checking if it dies
-        if np.random.uniform() < p_death:
-
-            # Updating parameters
-            G.nodes()[node]['vitals'] = 'dead'
-            n_deaths +=1
-
-    return G, n_deaths
+    # Updating node if death occurred
+    if has_death_occurred:
+        G.nodes()[node_label]['vitals'] = 'dead'
+        
+    return G, int(has_death_occurred)
 
 
 def check_for_infection(G, source_label, target_label, reinfection):
@@ -163,8 +157,11 @@ def check_for_infection(G, source_label, target_label, reinfection):
 
 def check_for_recovery():
 
+    # Converting rate to probability
+    p_recovery = 1 - np.exp(-gamma * dt)
+
     # Checking if the infected individual has recovery with probability gamma
-    return np.random.uniform() < gamma
+    return np.random.uniform() < p_recovery
 
 
 def complete_step(G):
@@ -209,6 +206,9 @@ def get_state_totals(G):
 
 def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
 
+    # Variable to be used to check for stochastic extinction
+    peak_inf = 0
+
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_%s.txt' % (iter_num + 1), 'w')
     mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s' % (n_nodes, I0, sim_time, gamma, sigma))
@@ -222,13 +222,22 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
-        # Updating host dynamics
-        G, n_births = get_host_births(G)
-        G, n_deaths = get_host_deaths(G)
+        # Initialising iteration births and deaths
+        n_births = n_deaths = 0
 
         # Looping through number of nodes
         for n in range(G.number_of_nodes()):
-        
+
+            # Checking if dead node is reborn
+            if G.nodes()[n]['vitals'] == 'alive':
+                G, is_birth = get_potential_node_birth(G, n)
+                n_births += is_birth
+
+            # Checking if living node dies
+            else:
+                G, is_death = get_potential_node_death(G, n)
+                n_deaths += is_death
+                
             # Completing an iteration step
             G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
             
@@ -243,6 +252,10 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
             mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
             t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total, n_births, n_deaths))
 
+        # Determining if I total is greater than current peak inf
+        if I_total > peak_inf:
+            peak_inf = I_total
+        
         # Logging total results
         totals_outfile.write('\n%s,%s,%s,%s' % (t, S_total, I_total, M_total))
 
@@ -250,18 +263,39 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
     mc_outfile.close()
     totals_outfile.close()
 
+    # Returning whether an extinction event occurred
+    return peak_inf < 2
+    
 
 def repeat_simulation(N, I0, t_max, num_iterations=1):
+
+    # Initialising a variable to store proportition of stochastic extinctions and number of attempts
+    no_attempts, no_extinctions = 0, 0
 
     # Repeating entire simulation required number of times
     for n in range(num_iterations):
 
-        # Initialising the simulation
-        G = initialise_graph(n_nodes=N, n_alive=N_alive)
-        G = initialise_infections(G, n_nodes=N, n_infected=I0)
+        # Updating attempt counter
+        no_attempts += 1
 
-        # Running the simulation
-        run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n)
+        # Creating a temporary variable to force a simulation to repeat until non extinctions occur
+        was_extinct = True
+
+        # Repeating the simulation until an extinction does not occur
+        while was_extinct == True:
+
+            # Initialising the simulation
+            G = initialise_graph(n_nodes=N, n_alive=N_alive)
+            G = initialise_infections(G, n_nodes=N, n_infected=I0)
+
+            # Running the current iteration
+            was_extinct = run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n)
+
+            # Updating the number of extinctions if required
+            if was_extinct:
+                no_extinctions +=1
+
+    return no_attempts + no_extinctions, no_extinctions
 
 
 ##### CREATING USEFUL DATAFRAMES
@@ -291,6 +325,7 @@ def get_simulation_parameters():
     
 
 def get_results_dataframe():
+    
     # Creating a dataframe to store all results from all files
     results_df = pd.DataFrame()
 
@@ -361,7 +396,10 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, parameters):
 ##### MAIN
 
 # Repeating the simulation
-repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+no_attempts, no_extinctions = repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+
+# Displaying the extinction results
+print('There were %s extinctions and %s attempts -> proportion of %.2f' % (no_extinctions, no_attempts, no_extinctions/no_attempts))
 
 # Accessing the simulation parameters
 parameters_dict = get_simulation_parameters()

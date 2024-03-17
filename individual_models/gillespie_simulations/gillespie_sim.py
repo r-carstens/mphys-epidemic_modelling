@@ -20,7 +20,7 @@ S0 = N - I0 - R0
 t_max = 100
 
 # Setting the epidemic parameters
-gamma = 1/7
+gamma = 1/10
 sigma = 0
 
 
@@ -28,11 +28,11 @@ sigma = 0
 
 def get_mosquito_transmission():
     
-    m = np.random.uniform(low=0, high=5)               # number of mosquitoes in the region per human
-    a = np.random.uniform(low=0.1, high=0.5)           # rate at which a human is bitten by a mosquito
-    b = np.random.uniform(low=0, high=1)               # proportion of infected bites that cause infection in the human host
-    c = np.random.uniform(low=0, high=1)               # transmission efficiency from humans to mosquitoes
-    m_life_exp = np.random.uniform(low=1/7, high=1/5)  # life expectancy of mosquitoes
+    m = np.random.uniform(low=0, high=5)                # number of mosquitoes in the region per human
+    a = np.random.uniform(low=0, high=0.5)              # rate at which a human is bitten by a mosquito
+    b = np.random.uniform(low=0, high=1)                # proportion of infected bites that cause infection in the human host
+    c = np.random.uniform(low=0, high=1)                # transmission efficiency from humans to mosquitoes
+    m_life_exp = np.random.uniform(low=1/10, high=1/7)  # life expectancy of mosquitoes
 
     return (m * a**2 * b * c) * m_life_exp
 
