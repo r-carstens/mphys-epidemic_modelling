@@ -17,18 +17,22 @@ N = 100
 # Setting the initial conditions
 I0, R0 = 1, 0
 S0 = N - I0 - R0
-t_max = 250
+t_max = 100
+
+# Setting the epidemic parameters
+gamma = 1/7
+sigma = 0
 
 
 ##### NETWORK INITIALISATION
 
 def get_mosquito_transmission():
     
-    m = np.random.uniform(low=0, high=5)  # number of mosquitoes in the region per human
-    a = np.random.uniform(low=0.1, high=0.8)  # rate at which a human is bitten by a mosquito
-    b = np.random.uniform(low=0, high=1)  # proportion of infected bites that cause infection in the human host
-    c = np.random.uniform(low=0, high=1)  # transmission efficiency from humans to mosquitoes
-    m_life_exp = np.random.uniform(low=1/7, high=1/3)  # life expectancy of mosquitoes
+    m = np.random.uniform(low=0, high=5)               # number of mosquitoes in the region per human
+    a = np.random.uniform(low=0.1, high=0.5)           # rate at which a human is bitten by a mosquito
+    b = np.random.uniform(low=0, high=1)               # proportion of infected bites that cause infection in the human host
+    c = np.random.uniform(low=0, high=1)               # transmission efficiency from humans to mosquitoes
+    m_life_exp = np.random.uniform(low=1/7, high=1/5)  # life expectancy of mosquitoes
 
     return (m * a**2 * b * c) * m_life_exp
 
