@@ -17,11 +17,11 @@ immune = 'M'
 
 # Setting population data
 N = 500
-N_alive = int(0.8 * N)
+N_alive = int(1 * N)
 I0 = 1
 
 # Setting simulation data
-n_iterations = 10
+n_iterations = 1
 t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
@@ -29,15 +29,15 @@ gamma = 1/7
 sigma = 0
 
 # Setting vital parameters
-mu_B = 0.15
-mu_D = 0.07
+mu_B = 0.09
+mu_D = 0.05
 
 
 ##### NETWORK INITIALISATION
 
 def get_mosquito_transmission_rate():
 
-    m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
+    m = np.random.uniform(low=0, high=50)             # number of mosquitoes in the region per human
     a = np.random.uniform(low=0, high=5)             # rate at which a human is bitten by a mosquito
     b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
     c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
@@ -116,7 +116,7 @@ def get_potential_node_birth(G, node_label):
     # Updating node if birth occurred
     if has_birth_occurred:
         G.nodes()[node_label]['vitals'] = 'alive'
-        G.nodes()[node_label]['state'] == susceptible
+        G.nodes()[node_label]['state'] = susceptible
         
     return G, int(has_birth_occurred)
 
@@ -166,8 +166,11 @@ def check_for_recovery():
 
 def complete_step(G):
 
+    # Finding all living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    
     # Choosing two neighbours at random within the population
-    source_node, target_node = np.random.choice(np.arange(G.number_of_nodes()), size=2, replace=False)
+    source_node, target_node = np.random.choice(living_nodes, size=2, replace=False)
 
     # Determining the states of the target and source
     target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
@@ -264,6 +267,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
     totals_outfile.close()
 
     # Returning whether an extinction event occurred
+    print(peak_inf < 2)
     return peak_inf < 2
     
 
