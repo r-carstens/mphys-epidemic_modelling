@@ -11,46 +11,70 @@ mc_file_path = 'sim_with_hosts_mc'
 totals_file_path = 'sim_with_hosts_totals'
 event_path = 'host_events'
 
-# Setting the number of iteratino repeates
-n_iterations = 1
-
 # Initialising possible infection states
 susceptible = 'S'
 infected = 'I'
 immune = 'M'
 
-# Setting simulation data
-N = 1000
-N_alive = int(0.8 * N)
+# Setting population data
+N = 250
+N_alive = int(1 * N)
 I0 = 1
-t_max = 250
-dt = 0.2
+
+# Setting simulation data
+n_iterations = 1
+t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
-gamma = 0.1
+gamma = 1/7
 sigma = 0
 
 # Setting vital parameters
-p_birth = 0.05
-p_death = 0.02
+mu_B = 0.07
+mu_D = 0.04
 
-# Setting catastrophic events parameters
+# Setting event parameters
 kappa = 0.02
-omega = 0.2
+omega = 1
+lam = 0.07
+nu = 1
+
+
+##### SIMULATING CATASTROPHIC EVENTS
+
+def get_event_times(sim_time):
+
+    # Checking if an event occurs at each timestep
+    return np.random.uniform(size=sim_time) < (kappa * dt)
+
+
+def get_event_impact(sim_time, event_times):
+
+    # Initialising an array to store the event impact at each step and increasing rate at step
+    event_impact = np.ones(shape=sim_time) * mu_D
+    event_impact[event_times] += omega
+    
+    return event_impact
 
 
 ##### NETWORK INITIALISATION
 
-def get_mosquito_transmission():
 
-    a = np.random.uniform(low=0.1, high=2)     # rate at which a human is bitten by a mosquito
-    b = np.random.uniform(low=0.1, high=1)     # proportion of infected bites that cause infection in the human host
-    c = np.random.uniform(low=0.1, high=1)     # transmission efficiency from humans to mosquitoes
-    m = np.random.uniform(low=0, high=50)      # number of mosquitoes in the region per human
-    mu = np.random.uniform(low=10, high=60)    # life expectancy of mosquitoes
+def get_mosquito_transmission_rate():
 
-    # return (a ** 2 * b * c * m) / mu
-    return 0.5
+    m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
+    a = np.random.uniform(low=0, high=5)             # rate at which a human is bitten by a mosquito
+    b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
+    c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
+    life_exp = np.random.uniform(low=1/21, high=1/7)  # life expectancy of mosquitoes
+
+    return (m * a**2 * b * c) * life_exp
+
+
+def get_mosquito_transmission_probabilitity(rate):
+
+    # Assuming exponentially-distributed
+    return 1 - np.exp(-rate * dt)
 
 
 def initialise_graph(n_nodes, n_alive):
@@ -72,8 +96,12 @@ def initialise_graph(n_nodes, n_alive):
     # Looping through all edges
     for u, v in G.edges():
 
+        # Determining the mosquito transmission rate and probability
+        m_rate = get_mosquito_transmission_rate()
+        m_prob = get_mosquito_transmission_probabilitity(m_rate)
+
         # Adding weights to the edges to represent mosquito transmission
-        G[u][v]['weight'] = get_mosquito_transmission()
+        G[u][v]['weight'] = m_prob
 
     return G
 
@@ -100,51 +128,37 @@ def initialise_infections(G, n_nodes, n_infected):
     return G
 
 
-##### SIMULATING CATASTROPHIC EVENTS
-
-def get_event_times(sim_time):
-
-    # Checking if an event occurs at each timestep
-    return np.random.uniform(size=sim_time) < (kappa * dt)
-
-
-def get_event_impact(sim_time, event_times):
-
-    # Initialising an array to store the event impact at each step
-    event_impact = np.ones(shape=sim_time) * p_death
-
-    # Increasing probability at chosen steps
-    event_impact[event_times] += omega
-    
-    return event_impact
-
-
 ##### RUNNING THE SIMULATION
 
-def get_potential_birth(G, node):
+def get_potential_node_birth(G, node_label):
 
-    # Checking if it becomes reborn
-    check_for_birth = np.random.uniform() < p_birth
+    # Determining the current birth probability
+    p_birth = 1 - np.exp(-mu_B * dt)
 
-    # Updating node if required
-    if check_for_birth:
+    # Determining whether a birth occurred
+    has_birth_occurred = np.random.uniform() < p_birth
+
+    # Updating node if birth occurred
+    if has_birth_occurred:
+        G.nodes()[node_label]['vitals'] = 'alive'
+        G.nodes()[node_label]['state'] = susceptible
         
-        # Updating node parameters
-        G.nodes()[node]['vitals'] = 'alive'
-        G.nodes()[node]['state'] = susceptible
-
-    return G, int(check_for_birth)
+    return G, int(has_birth_occurred)
 
 
-def get_potential_death(G, node, current_p_death):
+def get_potential_node_death(G, node_label, event_impact):
 
-    # Checking if node dies
-    check_for_death = np.random.uniform() < current_p_death
+    # Determining the current death probability
+    p_death = 1 - np.exp(-event_impact * dt)
 
-    # Updating the node if required
-    G.nodes()[node]['vitals'] = 'dead'
+    # Determining whether a death occurred
+    has_death_occurred = np.random.uniform() < p_death
 
-    return G, int(check_for_death)
+    # Updating node if death occurred
+    if has_death_occurred:
+        G.nodes()[node_label]['vitals'] = 'dead'
+        
+    return G, int(has_death_occurred)
 
 
 def check_for_infection(G, source_label, target_label, reinfection):
@@ -168,14 +182,20 @@ def check_for_infection(G, source_label, target_label, reinfection):
 
 def check_for_recovery():
 
+    # Converting rate to probability
+    p_recovery = 1 - np.exp(-gamma * dt)
+
     # Checking if the infected individual has recovery with probability gamma
-    return np.random.uniform() < gamma
+    return np.random.uniform() < p_recovery
 
 
 def complete_step(G):
 
+    # Finding all living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    
     # Choosing two neighbours at random within the population
-    source_node, target_node = np.random.choice(np.arange(G.number_of_nodes()), size=2, replace=False)
+    source_node, target_node = np.random.choice(living_nodes, size=2, replace=False)
 
     # Determining the states of the target and source
     target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
@@ -204,15 +224,21 @@ def complete_step(G):
 
 def get_state_totals(G):
 
+    # Determining all living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    
     # Counting the number of individuals within each state
-    S_total = np.sum([G.nodes()[node]['state'] == susceptible for node in G.nodes()])
-    I_total = np.sum([G.nodes()[node]['state'] == infected for node in G.nodes()])
-    M_total = np.sum([G.nodes()[node]['state'] == immune for node in G.nodes()])
+    S_total = np.sum([G.nodes()[node]['state'] == susceptible for node in living_nodes])
+    I_total = np.sum([G.nodes()[node]['state'] == infected for node in living_nodes])
+    M_total = np.sum([G.nodes()[node]['state'] == immune for node in living_nodes])
 
     return S_total, I_total, M_total
 
 
 def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
+
+    # Variable to be used to check for stochastic extinction
+    peak_inf = 0
 
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_%s.txt' % (iter_num + 1), 'w')
@@ -227,26 +253,22 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
 
-        # Initialising variables to count births and deaths
+        # Initialising iteration births and deaths
         n_births = n_deaths = 0
 
         # Looping through number of nodes
-        for node in range(G.number_of_nodes()):
+        for n in range(G.number_of_nodes()):
 
-            # Checking if the node is dead
-            if G.nodes()[node]['vitals'] == 'dead':
+            # Checking if dead node is reborn
+            if G.nodes()[n]['vitals'] == 'dead':
+                G, is_birth = get_potential_node_birth(G, n)
+                n_births += is_birth
 
-                # Updating if a birth occurs and updating counter if required
-                G, check_for_birth = get_potential_birth(G, node)
-                n_births += check_for_birth
-
-            # Checking if the node is alive
+            # Checking if living node dies
             else:
-
-                # Updating if a death occurs and updating counter if required
-                G, check_for_death = get_potential_death(G, node, event_impact[t])
-                n_deaths += check_for_death
-
+                G, is_death = get_potential_node_death(G, n, event_impact[t])
+                n_deaths += is_death
+                
             # Completing an iteration step
             G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
             
@@ -261,6 +283,10 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
             mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
             t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
 
+        # Determining if I total is greater than current peak inf
+        if I_total > peak_inf:
+            peak_inf = I_total
+        
         # Logging total results
         totals_outfile.write('\n%s,%s,%s,%s,%s,%s' % (t, S_total, I_total, M_total, n_births, n_deaths))
 
@@ -268,6 +294,9 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
     mc_outfile.close()
     totals_outfile.close()
 
+    # Returning whether an extinction event occurred
+    return peak_inf < 2
+    
 
 def repeat_simulation(N, I0, t_max, num_iterations=1):
 
@@ -283,15 +312,33 @@ def repeat_simulation(N, I0, t_max, num_iterations=1):
         for event_data in list(zip(event_times, event_impact)):
             event_outfile.write('\n%s,%s' % (event_data))
 
+    # Initialising a variable to store proportition of stochastic extinctions and number of attempts
+    no_attempts, no_extinctions = 0, 0
+
     # Repeating entire simulation required number of times
     for n in range(num_iterations):
 
-        # Initialising the simulation
-        G = initialise_graph(n_nodes=N, n_alive=N_alive)
-        G = initialise_infections(G, n_nodes=N, n_infected=I0)
+        # Updating attempt counter
+        no_attempts += 1
 
-        # Running the simulation
-        run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n, event_impact=event_impact)
+        # Creating a temporary variable to force a simulation to repeat until non extinctions occur
+        was_extinct = True
+
+        # Repeating the simulation until an extinction does not occur
+        while was_extinct == True:
+
+            # Initialising the simulation
+            G = initialise_graph(n_nodes=N, n_alive=N_alive)
+            G = initialise_infections(G, n_nodes=N, n_infected=I0)
+
+            # Running the current iteration
+            was_extinct = run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n, event_impact=event_impact)
+
+            # Updating the number of extinctions if required
+            if was_extinct:
+                no_extinctions +=1
+
+    return no_attempts + no_extinctions, no_extinctions
 
 
 ##### CREATING USEFUL DATAFRAMES
@@ -406,7 +453,10 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, paramet
 ##### MAIN
 
 # Repeating the simulation
-repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+no_attempts, no_extinctions = repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+
+# Displaying the extinction results
+print('There were %s extinctions and %s attempts -> proportion of %.2f' % (no_extinctions, no_attempts, no_extinctions/no_attempts))
 
 # Accessing the simulation parameters
 parameters_dict = get_simulation_parameters()
