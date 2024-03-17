@@ -199,10 +199,13 @@ def complete_step(G):
 
 def get_state_totals(G):
 
+    # Determining all living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    
     # Counting the number of individuals within each state
-    S_total = np.sum([G.nodes()[node]['state'] == susceptible for node in G.nodes()])
-    I_total = np.sum([G.nodes()[node]['state'] == infected for node in G.nodes()])
-    M_total = np.sum([G.nodes()[node]['state'] == immune for node in G.nodes()])
+    S_total = np.sum([G.nodes()[node]['state'] == susceptible for node in living_nodes])
+    I_total = np.sum([G.nodes()[node]['state'] == infected for node in living_nodes])
+    M_total = np.sum([G.nodes()[node]['state'] == immune for node in living_nodes])
 
     return S_total, I_total, M_total
 
