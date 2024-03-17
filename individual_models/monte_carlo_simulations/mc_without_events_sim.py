@@ -16,17 +16,17 @@ infected = 'I'
 immune = 'M'
 
 # Setting population data
-N = 100
+N = 500
 N_alive = int(1 * N)
 I0 = 1
 
 # Setting simulation data
-n_iterations = 1
+n_iterations = 10
 t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
 gamma = 1/7
-sigma = 0
+sigma = 0.5
 
 # Setting vital parameters
 mu_B = 0.09
@@ -37,7 +37,7 @@ mu_D = 0.05
 
 def get_mosquito_transmission_rate():
 
-    m = np.random.uniform(low=0, high=50)             # number of mosquitoes in the region per human
+    m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
     a = np.random.uniform(low=0, high=5)             # rate at which a human is bitten by a mosquito
     b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
     c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
@@ -267,7 +267,6 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num):
     totals_outfile.close()
 
     # Returning whether an extinction event occurred
-    print(peak_inf < 2)
     return peak_inf < 2
     
 
@@ -394,7 +393,7 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, parameters):
     plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
     plt.xlabel('Time (days)')
     plt.ylabel('Population sizes')
-    plt.savefig('simulation_N-%s_sigma-%s.png')
+    plt.savefig('simulation_N-%s_sigma-%s.png' % (N, parameters['sigma']))
 
 
 ##### MAIN
