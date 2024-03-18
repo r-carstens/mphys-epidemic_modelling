@@ -17,7 +17,7 @@ infected = 'I'
 immune = 'M'
 
 # Setting population data
-N = 250
+N = 500
 N_alive = int(1 * N)
 I0 = 1
 
@@ -35,7 +35,7 @@ mu_D = 0.04
 
 # Setting event parameters
 kappa = 0.02
-omega = 1
+omega = 0.2
 lam = 0.07
 nu = 1
 
@@ -300,9 +300,19 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
 
 def repeat_simulation(N, I0, t_max, num_iterations=1):
 
-    # Determining event impact for simulations
-    event_times = get_event_times(t_max)
-    event_impact = get_event_impact(t_max, event_times)
+    # Initialising a variable to store whether at least one event occurred
+    event_occurred = False
+
+    # Repeating until an event occurs
+    while event_occurred == False:
+
+        # Determining event impact for simulations
+        event_times = get_event_times(t_max)
+        event_impact = get_event_impact(t_max, event_times)
+
+        # Determining whether an event occurred
+        if len(np.nonzero(event_times)[0]) > 0:
+            event_occurred = True
 
     # Creating file to write catastrophic event data to
     with open(event_path + '.txt', 'w') as event_outfile:
