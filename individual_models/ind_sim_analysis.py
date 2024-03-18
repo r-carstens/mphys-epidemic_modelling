@@ -499,20 +499,40 @@ def get_variant_analysis(substitution_tree, cross_tree):
 
 # Finding all files
 sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(mc_file_path)]
-first_file = sim_data_files[0]
 
-# Accessing the simulation parameters
-parameters_dict = get_simulation_parameters(first_file)
+# Creating a structure to store the average diversities
+all_sub_divs = np.zeros(shape=(len(sim_data_files), 3))
+all_cross_divs = np.zeros(shape=(len(sim_data_files), 3))
 
-# Determining if the file includes cross immunity (sigma =! 0)
-check_for_cross_immunity = (parameters_dict['sigma'] != 0)
+# Looping through files
+for counter, filename in enumerate(sim_data_files):
+    
+    # Accessing the simulation parameters
+    parameters_dict = get_simulation_parameters(filename)
+    
+    # Determining if the file includes cross immunity (sigma =! 0)
+    check_for_cross_immunity = (parameters_dict['sigma'] != 0)
+    
+    # Determining the relevant simulation trees and data
+    inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_immunity_tree = get_trees(filename, check_for_cross_immunity)
+    
+    # Analysising the variants
+    sub_diversities, cross_diversities = get_variant_analysis(substitution_tree, cross_immunity_tree)
 
-# Determining the relevant simulation trees and data
-inf_df, transmission_dict, transmission_tree, substitution_tree, phylogenetic_tree, cross_immunity_tree = get_trees(first_file, check_for_cross_immunity)
+    # Storing the results
+    all_sub_divs[counter] = sub_diversities
+    all_cross_divs[counter] = cross_diversities
 
-# Analysising the variants
-sub_diversities, cross_diversities = get_variant_analysis(substitution_tree, cross_immunity_tree)
+# Determining the average results
+avg_sub_divs = np.average(all_sub_divs, axis=0)
+avg_cross_divs = np.average(all_cross_divs, axis=0)
 
-# Displaying the diversity numbers
-print('Sub diversities: %s' % ', '.join(list(sub_diversities.astype(str))))
-print('Cross diversities: %s' % ', '.join(list(cross_diversities.astype(str))))
+# Determining the variances
+var_sub_divs = np.var(all_sub_divs, axis=0)
+var_cross_divs = np.var(all_cross_divs, axis=0)
+
+# Printing the results
+print('Average sub diversities: %s' % ', '.join(list(avg_sub_divs.astype(str))))
+print('Average cross diversities: %s\n' % ', '.join(list(avg_cross_divs.astype(str))))
+print('Variance in sub diversities: %s' % ', '.join(list(var_sub_divs.astype(str))))
+print('Variance in cross diversities: %s' % ', '.join(list(var_cross_divs.astype(str))))
