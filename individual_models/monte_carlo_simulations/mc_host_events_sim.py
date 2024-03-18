@@ -22,7 +22,7 @@ N_alive = int(1 * N)
 I0 = 1
 
 # Setting simulation data
-n_iterations = 20
+n_iterations = 1
 t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
@@ -463,16 +463,19 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, paramet
 
 # Setting the event parameters
 kappa_val = 0.02
-omega_val = 0.2
+omegas = np.linspace(start=0, stop=1, num=10)
 
-# Repeating the simulation
-prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
+# Looping through omegas
+for omega_val in omegas:
+    
+    # Repeating the simulation
+    prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
 
-# Accessing the simulation parameters and creating useful dataframes
-parameters_dict = get_simulation_parameters(kappa_val, omega_val)
-events_df = get_events_dataframe(kappa_val, omega_val)
-results_df = get_results_dataframe(kappa_val, omega_val)
-susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
+    # Accessing the simulation parameters and creating useful dataframes
+    parameters_dict = get_simulation_parameters(kappa_val, omega_val)
+    events_df = get_events_dataframe(kappa_val, omega_val)
+    results_df = get_results_dataframe(kappa_val, omega_val)
+    susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
-# Plotting the data
-plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
+    # Plotting the data
+    # plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
