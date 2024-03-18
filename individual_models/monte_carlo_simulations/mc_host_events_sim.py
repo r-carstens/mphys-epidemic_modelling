@@ -33,10 +33,6 @@ sigma = 0
 mu_B = 0.07
 mu_D = 0.04
 
-# Setting event parameters
-kappa = 0.02
-omega = 0.2
-
 
 ##### SIMULATING CATASTROPHIC EVENTS
 
@@ -464,6 +460,10 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, paramet
 
 
 ##### MAIN
+
+# Setting the event parameters
+kappa_val = 0.02
+omega_val = 0.2
 
 # Repeating the simulation
 prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
