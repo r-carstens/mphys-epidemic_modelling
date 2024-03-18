@@ -17,7 +17,7 @@ infected = 'I'
 immune = 'M'
 
 # Setting a mutation rate
-p_mutation = 0.2
+p_mutation = 0.3
 
 
 ##### USEFUL HELPER FUNCTIONS
