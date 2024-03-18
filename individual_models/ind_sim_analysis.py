@@ -8,7 +8,7 @@ import string
 import os
 
 # Setting filename to be used for storing and reading data
-mc_file_path = 'sim_with_hosts_mc'
+mc_file_path = 'sim_no_events_mc'
 event_path = 'host_events'
 
 # Initialising possible infection states
@@ -146,7 +146,7 @@ def get_substitution_tree(transmission_tree):
     for source_label, target_label, data in sorted_sub_edges:
 
         # Extracting the data from the current event
-        timestep, substitution_occurred, reinfection_occurred = [value for key, value in data.items()]
+        timestep, reinfection_occurred, substitution_occurred = [value for key, value in data.items()]
 
         # Extracting the source pathogen name at the timestep
         source_pathogen = sub_tree.nodes(data=True)[source_label]['current_pathogen_name']
@@ -396,7 +396,7 @@ def get_final_t_data(path_history, t2_step):
 def get_predecessor_node(substitution_tree, final_t, target_label):
 
     # Initialising variable to store the found predecessor
-    found_sorce_label = -1
+    found_source_label = -1
     
     # Looping through all edges
     for temp_source_label, temp_target_label, temp_data in substitution_tree.edges(data=True):
