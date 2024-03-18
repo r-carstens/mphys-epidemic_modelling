@@ -22,7 +22,7 @@ N_alive = int(1 * N)
 I0 = 1
 
 # Setting simulation data
-n_iterations = 1
+n_iterations = 20
 t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
@@ -36,23 +36,25 @@ mu_D = 0.04
 # Setting event parameters
 kappa = 0.02
 omega = 0.2
-lam = 0.07
-nu = 1
 
 
 ##### SIMULATING CATASTROPHIC EVENTS
 
-def get_event_times(sim_time):
+def get_event_times(sim_time, kappa_val):
 
     # Checking if an event occurs at each timestep
-    return np.random.uniform(size=sim_time) < (kappa * dt)
+    return np.random.uniform(size=sim_time) < (kappa_val * dt)
 
 
-def get_event_impact(sim_time, event_times):
+def get_event_impact(sim_time, event_times, omega_val):
 
     # Initialising an array to store the event impact at each step and increasing rate at step
     event_impact = np.ones(shape=sim_time) * mu_D
-    event_impact[event_times] += omega
+    event_impact[event_times] += omega_val
+
+    # Ensuring all rates are reasonable
+    event_impact[event_impact > 1] = 1
+    event_impact[event_impact < 0] = 0
     
     return event_impact
 
@@ -235,19 +237,19 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
+def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, omega_val, iter_num):
 
     # Variable to be used to check for stochastic extinction
     peak_inf = 0
 
     # Creating a file to store the mc results to
-    mc_outfile = open(mc_file_path + '_%s.txt' % (iter_num + 1), 'w')
-    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
+    mc_outfile = open(mc_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
+    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
     mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
 
     # Creating a file to store the total results to
-    totals_outfile = open(totals_file_path + '_%s.txt' % (iter_num + 1), 'w')
-    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa, omega))
+    totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
+    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
     totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths')
     
     # Looping through timesteps
@@ -298,7 +300,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, iter_num, event_impact):
     return peak_inf < 2
     
 
-def repeat_simulation(N, I0, t_max, num_iterations=1):
+def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
 
     # Initialising a variable to store whether at least one event occurred
     event_occurred = False
@@ -307,15 +309,15 @@ def repeat_simulation(N, I0, t_max, num_iterations=1):
     while event_occurred == False:
 
         # Determining event impact for simulations
-        event_times = get_event_times(t_max)
-        event_impact = get_event_impact(t_max, event_times)
+        event_times = get_event_times(t_max, kappa_val)
+        event_impact = get_event_impact(t_max, event_times, omega_val)
 
-        # Determining whether an event occurred
-        if len(np.nonzero(event_times)[0]) > 0:
+        # Determining whether only one event occurred
+        if len(np.nonzero(event_times)[0]) == 1:
             event_occurred = True
 
     # Creating file to write catastrophic event data to
-    with open(event_path + '.txt', 'w') as event_outfile:
+    with open(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), 'w') as event_outfile:
         event_outfile.write('event_occurred,event_impact')
 
         # Writing catastrophic event data
@@ -342,24 +344,25 @@ def repeat_simulation(N, I0, t_max, num_iterations=1):
             G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
             # Running the current iteration
-            was_extinct = run_simulation_iteration(G, n_nodes=N, I0=I0, sim_time=t_max, iter_num=n, event_impact=event_impact)
+            was_extinct = run_simulation_iteration(G, N, I0, t_max, event_impact, kappa_val, omega_val, n)
 
             # Updating the number of extinctions if required
             if was_extinct:
                 no_extinctions +=1
 
-    return no_attempts + no_extinctions, no_extinctions
+    # Returning the extinction proportion
+    return no_extinctions / (no_attempts + no_extinctions)
 
 
 ##### CREATING USEFUL DATAFRAMES
 
-def get_simulation_parameters():
+def get_simulation_parameters(kappa_val, omega_val):
 
     # Creating a structure to store the simulation parameters
     parameters_dict = dict()
 
     # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path)]
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path + '_k-%s_om-%s' % (kappa_val, omega_val))]
 
     # Opening the first file (all simulation repeats have the same basic parameters)
     with open(sim_data_files[0], 'r') as in_file:
@@ -377,20 +380,20 @@ def get_simulation_parameters():
     return parameters_dict
     
 
-def get_events_dataframe():
+def get_events_dataframe(kappa_val, omega_val):
 
     # Reading in the data
-    events_df = pd.read_csv(event_path + '.txt', delimiter=',')
+    events_df = pd.read_csv(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), delimiter=',')
     return events_df
 
 
-def get_results_dataframe():
+def get_results_dataframe(kappa_val, omega_val):
 
     # Creating a dataframe to store all results from all files
     results_df = pd.DataFrame()
 
     # Locating all data files within the directory
-    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path)]
+    sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(totals_file_path + '_k-%s_om-%s' % (kappa_val, omega_val))]
 
     # Looping through each data file
     for counter, file in enumerate(sim_data_files):
@@ -463,18 +466,13 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, paramet
 ##### MAIN
 
 # Repeating the simulation
-no_attempts, no_extinctions = repeat_simulation(N=N, I0=I0, t_max=t_max, num_iterations=n_iterations)
+prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
 
-# Displaying the extinction results
-print('There were %s extinctions and %s attempts -> proportion of %.2f' % (no_extinctions, no_attempts, no_extinctions/no_attempts))
-
-# Accessing the simulation parameters
-parameters_dict = get_simulation_parameters()
-
-# Creating useful dataframes
-results_df = get_results_dataframe()
-events_df = get_events_dataframe()
+# Accessing the simulation parameters and creating useful dataframes
+parameters_dict = get_simulation_parameters(kappa_val, omega_val)
+events_df = get_events_dataframe(kappa_val, omega_val)
+results_df = get_results_dataframe(kappa_val, omega_val)
 susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
-plot_state_totals(susceptible_df=susceptible_df, infected_df=infected_df, immune_df=immune_df, events_df=events_df, parameters=parameters_dict)
+plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
