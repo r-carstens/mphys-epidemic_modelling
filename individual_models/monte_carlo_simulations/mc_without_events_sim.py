@@ -396,7 +396,7 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, parameters):
     plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
     plt.xlabel('Time (days)')
     plt.ylabel('Population sizes')
-    plt.savefig('simulation_N-%s_sigma-%s.png' % (N, parameters['sigma']))
+    plt.savefig('simulation_N-%s_sigma-%s.png' % (parameters['N'], parameters['sigma']))
 
 
 ##### MAIN

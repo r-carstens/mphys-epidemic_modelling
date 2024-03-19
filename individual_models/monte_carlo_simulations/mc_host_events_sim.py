@@ -450,7 +450,7 @@ def plot_state_totals(susceptible_df, infected_df, immune_df, events_df, paramet
 
         # Plotting event if required
         if is_event_time:
-            plt.vlines(x=t, ymin=0, ymax=N, linestyles='dashed')
+            plt.vlines(x=t, ymin=0, ymax=parameters['N'], linestyles='dashed')
     
     # Adding plot titles and legend
     plt.title('Population sizes versus time for individual-based SIM model\nwith gamma=%s and sigma=%s' % (parameters['gamma'], parameters['sigma']))
