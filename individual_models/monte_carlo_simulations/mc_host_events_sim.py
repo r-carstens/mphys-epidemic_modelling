@@ -28,7 +28,7 @@ t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
 gamma = 1/7
-sigma = 0
+sigma = 0.5
 
 # Setting vital parameters
 mu_B = 0.07
@@ -70,7 +70,7 @@ def get_event_impact(sim_time, event_times, omega_val):
 def get_mosquito_transmission_rate():
 
     m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
-    a = np.random.uniform(low=0, high=5)             # rate at which a human is bitten by a mosquito
+    a = np.random.uniform(low=0, high=5)              # rate at which a human is bitten by a mosquito
     b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
     c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
     life_exp = np.random.uniform(low=1/21, high=1/7)  # life expectancy of mosquitoes
@@ -267,7 +267,7 @@ def complete_step(G, sub_counter):
                 target_mutation_after += '_%s' % sub_names[sub_counter]
                 sub_counter += 1
 
-    return G, source_node, target_node, source_during, target_before, target_after, target_mutation_before, target_mutation_after, sub_counter
+    return G, source_node, target_node, source_during, target_before, target_after, target_mutation_after, sub_counter
 
 
 def get_state_totals(G):
@@ -283,7 +283,7 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, omega_val, iter_num):
+def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact, kappa_val, omega_val, iter_num):
 
     # Variable to store substitutions
     sub_counter = 0
@@ -294,12 +294,12 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, 
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
     mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
-    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,target_mutation_before,target_mutation_after,S_total,I_total,M_total')
+    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,target_mutation_after,S_total,I_total,M_total,event_occurred')
 
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
     totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
-    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths')
+    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths,event_occurred')
     
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
@@ -321,7 +321,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, 
                 n_deaths += is_death
                 
             # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after, target_mutation_before, target_mutation_after, sub_counter = complete_step(G, sub_counter)
+            G, source_label, target_label, source_during, target_before, target_after, target_mutation_after, sub_counter = complete_step(G, sub_counter)
             
             # Updating network if required
             if target_before != target_after:
@@ -333,14 +333,14 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, 
         
             # Logging the mcs results
             mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, target_mutation_before, target_mutation_after, S_total, I_total, M_total))
+            t, source_label, target_label, source_during, target_before, target_after, target_mutation_after, S_total, I_total, M_total, event_times[t]))
 
         # Determining if I total is greater than current peak inf
         if I_total > peak_inf:
             peak_inf = I_total
         
         # Logging total results
-        totals_outfile.write('\n%s,%s,%s,%s,%s,%s' % (t, S_total, I_total, M_total, n_births, n_deaths))
+        totals_outfile.write('\n%s,%s,%s,%s,%s,%s,%s' % (t, S_total, I_total, M_total, n_births, n_deaths, event_times[t]))
 
     # Closing the data file
     mc_outfile.close()
@@ -352,20 +352,10 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, 
 
 def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
 
-    # Initialising a variable to store whether at least one event occurred
-    event_occurred = False
-
-    # Repeating until an event occurs
-    while event_occurred == False:
-
-        # Determining event impact for simulations
-        event_times = get_event_times(t_max, kappa_val)
-        event_impact = get_event_impact(t_max, event_times, omega_val)
-
-        # Determining whether only one event occurred
-        if len(np.nonzero(event_times)[0]) == 1:
-            event_occurred = True
-
+    # Determining event impact for simulations
+    event_times = get_event_times(t_max, kappa_val)
+    event_impact = get_event_impact(t_max, event_times, omega_val)
+    
     # Creating file to write catastrophic event data to
     with open(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), 'w') as event_outfile:
         event_outfile.write('event_occurred,event_impact')
@@ -394,7 +384,7 @@ def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
             G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
             # Running the current iteration
-            was_extinct = run_simulation_iteration(G, N, I0, t_max, event_impact, kappa_val, omega_val, n)
+            was_extinct = run_simulation_iteration(G, N, I0, t_max, event_times, event_impact, kappa_val, omega_val, n)
 
             # Updating the number of extinctions if required
             if was_extinct:
@@ -520,16 +510,17 @@ kappa_val = 0.02
 omegas = np.linspace(start=0, stop=1, num=10)
 
 # Looping through omegas
-for omega_val in omegas:
+# for omega_val in omegas:
+omega_val = omegas[0]
 
-    # Repeating the simulation
-    prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
-    
-    # Accessing the simulation parameters and creating useful dataframes
-    parameters_dict = get_simulation_parameters(kappa_val, omega_val)
-    events_df = get_events_dataframe(kappa_val, omega_val)
-    results_df = get_results_dataframe(kappa_val, omega_val)
-    susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
-    
-    # Plotting the data
-    # plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
+# Repeating the simulation
+prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
+
+# Accessing the simulation parameters and creating useful dataframes
+parameters_dict = get_simulation_parameters(kappa_val, omega_val)
+events_df = get_events_dataframe(kappa_val, omega_val)
+results_df = get_results_dataframe(kappa_val, omega_val)
+susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
+
+# Plotting the data
+plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
