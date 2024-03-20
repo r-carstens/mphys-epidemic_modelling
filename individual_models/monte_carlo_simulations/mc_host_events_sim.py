@@ -4,6 +4,7 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import string
 
 
 # Setting filename to be used for storing and reading data
@@ -17,7 +18,7 @@ infected = 'I'
 immune = 'M'
 
 # Setting population data
-N = 500
+N = 250
 N_alive = int(1 * N)
 I0 = 1
 
@@ -32,6 +33,15 @@ sigma = 0
 # Setting vital parameters
 mu_B = 0.07
 mu_D = 0.04
+
+
+##### SUBSTITUTION PARAMETERS
+
+# Setting a mutation rate
+p_mutation = 0.3
+
+# Creating an array of possible subsitutions
+sub_names = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + list(np.arange(10000).astype(str))
 
 
 ##### SIMULATING CATASTROPHIC EVENTS
@@ -56,7 +66,6 @@ def get_event_impact(sim_time, event_times, omega_val):
 
 
 ##### NETWORK INITIALISATION
-
 
 def get_mosquito_transmission_rate():
 
@@ -118,15 +127,17 @@ def initialise_infections(G, n_nodes, n_infected):
         # Checking if current node was chosen to be infected
         if node in random_infected_nodes:
             G.nodes()[node]['state'] = infected
+            G.nodes()[node]['mutation'] = 'a'
 
         # Otherwise making node susceptible
         else:
             G.nodes()[node]['state'] = susceptible
+            G.nodes()[node]['mutation'] = ''
 
     return G
 
 
-##### RUNNING THE SIMULATION
+##### VITAL DYNAMICS
 
 def get_potential_node_birth(G, node_label):
 
@@ -140,6 +151,7 @@ def get_potential_node_birth(G, node_label):
     if has_birth_occurred:
         G.nodes()[node_label]['vitals'] = 'alive'
         G.nodes()[node_label]['state'] = susceptible
+        G.nodes()[node_label]['mutation'] = ''
         
     return G, int(has_birth_occurred)
 
@@ -158,6 +170,8 @@ def get_potential_node_death(G, node_label, event_impact):
         
     return G, int(has_death_occurred)
 
+
+##### STATE CHANGE TESTS
 
 def check_for_infection(G, source_label, target_label, reinfection):
 
@@ -187,7 +201,15 @@ def check_for_recovery():
     return np.random.uniform() < p_recovery
 
 
-def complete_step(G):
+def check_for_mutation():
+
+    # Testing the mutation probability against a random number
+    return np.random.uniform() < p_mutation
+
+
+##### RUNNING THE SIMULATION
+
+def complete_step(G, sub_counter):
 
     # Finding all living nodes
     living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
@@ -199,25 +221,53 @@ def complete_step(G):
     target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
     target_after = target_before
 
+    # Determining the mutations
+    source_mutation, target_mutation_before = G.nodes()[source_node]['mutation'], G.nodes()[target_node]['mutation']
+    target_mutation_after = target_mutation_before
+
+    # Checking if nodes are S and I
     if target_before == susceptible and source_during == infected:
 
         # Determining if the node being interacted with is infected and infection is transmitted
         if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=False):
-            target_after = infected
 
+            # Initialising new data
+            target_after = infected
+            target_mutation_after = source_mutation
+
+            # Checking for a mutation
+            if check_for_mutation():
+                
+                # Updating the pathogen name to include the substitution
+                target_mutation_after += '_%s' % sub_names[sub_counter]
+                sub_counter += 1
+
+    # Checking if node is I
     elif target_before == infected:
 
         # Checking for recovery
         if check_for_recovery():
             target_after = immune
+            target_mutation_after = ''
 
+    # Checking if nodes are M and I
     elif target_before == immune and source_during == infected:
 
         # Determining if the node being interacted with is infected and infection is transmitted
         if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=True):
-            target_after = infected
 
-    return G, source_node, target_node, source_during, target_before, target_after
+            # Initialising new data
+            target_after = infected
+            target_mutation_after = source_mutation
+
+            # Checking for a mutation
+            if check_for_mutation():
+                
+                # Updating the pathogen name to include the substitution
+                target_mutation_after += '_%s' % sub_names[sub_counter]
+                sub_counter += 1
+
+    return G, source_node, target_node, source_during, target_before, target_after, target_mutation_before, target_mutation_after, sub_counter
 
 
 def get_state_totals(G):
@@ -235,13 +285,16 @@ def get_state_totals(G):
 
 def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, omega_val, iter_num):
 
+    # Variable to store substitutions
+    sub_counter = 0
+    
     # Variable to be used to check for stochastic extinction
     peak_inf = 0
 
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
     mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
-    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,S_total,I_total,M_total')
+    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,target_mutation_before,target_mutation_after,S_total,I_total,M_total')
 
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
@@ -268,18 +321,19 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_impact, kappa_val, 
                 n_deaths += is_death
                 
             # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after = complete_step(G)
+            G, source_label, target_label, source_during, target_before, target_after, target_mutation_before, target_mutation_after, sub_counter = complete_step(G, sub_counter)
             
             # Updating network if required
             if target_before != target_after:
                 G.nodes()[target_label]['state'] = target_after
+                G.nodes()[target_label]['mutation'] = target_mutation_after
     
             # Counting the number of individuals in each state
             S_total, I_total, M_total = get_state_totals(G)
         
             # Logging the mcs results
-            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, S_total, I_total, M_total))
+            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            t, source_label, target_label, source_during, target_before, target_after, target_mutation_before, target_mutation_after, S_total, I_total, M_total))
 
         # Determining if I total is greater than current peak inf
         if I_total > peak_inf:
@@ -467,15 +521,15 @@ omegas = np.linspace(start=0, stop=1, num=10)
 
 # Looping through omegas
 for omega_val in omegas:
-    
+
     # Repeating the simulation
     prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
-
+    
     # Accessing the simulation parameters and creating useful dataframes
     parameters_dict = get_simulation_parameters(kappa_val, omega_val)
     events_df = get_events_dataframe(kappa_val, omega_val)
     results_df = get_results_dataframe(kappa_val, omega_val)
     susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
-
+    
     # Plotting the data
     # plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
