@@ -80,9 +80,12 @@ def get_transmission_dict(infection_df):
         # Determining whether the node was susceptible or immune prior to the infection
         was_reinfection = (infection_df['target_before'][ind] == immune)
 
+        # Extracting whether an event occurred
+        was_event = infection_df['event_occurred']
+
         # Storing the results
         transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'transmitted_pathogen': current_pathogen, 
-                                  'was_reinfection': was_reinfection}
+                                  'was_reinfection': was_reinfection, 'was_event': was_event}
 
     return transmission_dict
 
@@ -96,10 +99,10 @@ def get_transmission_tree(transmission_dict):
     for t, data in transmission_dict.items():
     
         # Extracting the data from the current event
-        source_label, target_label, current_pathogen, reinfection_occurred = [value for key, value in data.items()]
+        source_label, target_label, current_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
     
         # Adding an edge between the current source and target nodes and attributing the timestep
-        transmission_tree.add_edge(source_label, target_label, timestep=t, transmitted_path=current_pathogen, was_reinfection=reinfection_occurred)
+        transmission_tree.add_edge(source_label, target_label, timestep=t, transmitted_path=current_pathogen, was_reinfection=reinfection_occurred, was_event=was_event)
 
     return transmission_tree
 
@@ -123,7 +126,7 @@ def get_substitution_tree(transmission_tree):
     for source_label, target_label, data in sorted_sub_edges[1:]:
 
         # Extracting the data from the current event
-        timestep, transmitted_pathogen, reinfection_occurred = [value for key, value in data.items()]
+        timestep, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
 
         # Checking if the node already has pathogen name data
         if 'pathogen_history' in sub_tree.nodes[target_label]:
@@ -218,7 +221,7 @@ def get_immune_nodes(sub_tree, phylo_tree):
     for source_label, target_label, data in get_sorted_tree_edges(sub_tree):
 
         # Extracting data from the current event
-        timestep, transmitted_path, was_reinfection = [value for key, value in data.items()]
+        timestep, transmitted_path, was_reinfection, was_event = [value for key, value in data.items()]
 
         # Checking if the source node has already been removed, so removing the target if not already removed
         if source_label in removed_node_data and target_label not in removed_node_data:
@@ -279,7 +282,7 @@ def get_edge_removals(cross_tree, sub_tree, removed_node_data):
     for source_label, target_label, data in get_sorted_tree_edges(sub_tree):
 
         # Extracting data from the current event
-        current_timestep, transmitted_pathogen, reinfection_occurred = [value for key, value in data.items()]
+        current_timestep, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
 
         # Checking if the source node is in the removed node data
         if source_label in removed_node_data:
