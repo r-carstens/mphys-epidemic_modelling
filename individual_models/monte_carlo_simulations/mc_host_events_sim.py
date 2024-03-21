@@ -20,7 +20,7 @@ alive = 'alive'
 dead = 'dead'
 
 # Setting population data
-N = 100
+N = 1000
 N_alive = int(0.8 * N)
 I0 = 1
 
@@ -29,7 +29,7 @@ n_iterations = 1
 t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
-gamma = 1/7
+gamma = 1/10
 sigma = 0
 
 # Setting vital parameters
@@ -121,13 +121,13 @@ def initialise_infections(G, n_nodes, n_infected):
         if node in random_infected_nodes:
             G.nodes[node]['state'] = infected
             G.nodes[node]['mutation'] = 'a'
-            G.nodes[node]['time_in_state'] = 1
+            G.nodes[node]['time_in_state'] = dt
 
         # Otherwise making node susceptible
         else:
             G.nodes[node]['state'] = susceptible
             G.nodes[node]['mutation'] = ''
-            G.nodes[node]['time_in_state'] = 1
+            G.nodes[node]['time_in_state'] = dt
 
     return G
 
@@ -337,7 +337,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
             if target_before != target_after:
                 G.nodes[target_label]['state'] = target_after
                 G.nodes[target_label]['mutation'] = target_mutation_after
-                G.nodes[target_label]['time_in_state'] = t
+                G.nodes[target_label]['time_in_state'] = dt * t
     
             # Counting the number of individuals in each state
             S_total, I_total, M_total = get_state_totals(G)
@@ -537,4 +537,3 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
 plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
-        
