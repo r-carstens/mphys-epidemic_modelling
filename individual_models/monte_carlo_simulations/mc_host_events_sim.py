@@ -20,7 +20,7 @@ alive = 'alive'
 dead = 'dead'
 
 # Setting population data
-N = 500
+N = 1000
 N_alive = int(0.8 * N)
 I0 = 1
 
@@ -323,13 +323,13 @@ def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impa
 
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
-    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
-    mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,target_mutation_after,S_total,I_total,M_total,event_occurred')
+    mc_outfile.write('N=%s;I0=%s;t_max=%s;gamma=%s;sigma=%s;kappa=%s;omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
+    mc_outfile.write('\ntimestep;source_label;target_label;source_during;target_before;target_after;target_mutation_after;S_total;I_total;M_total;event_occurred')
 
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
-    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
-    totals_outfile.write('\ntimestep,S_total,I_total,M_total,event_occurred,n_births,n_deaths,reborn_nodes,removed_nodes')
+    totals_outfile.write('N=%s;I0=%s;t_max=%s;gamma=%s;sigma=%s;kappa=%s;omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
+    totals_outfile.write('\ntimestep;S_total;I_total;M_total;event_occurred;n_births;n_deaths;reborn_nodes;removed_nodes')
     
     # Looping through timesteps
     for i, t in enumerate(tqdm(time_array)):
@@ -355,7 +355,7 @@ def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impa
             S_total, I_total, M_total = get_state_totals(G)
         
             # Logging the mcs results
-            mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            mc_outfile.write('\n%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s' % (
             t, source_label, target_label, source_during, target_before, target_after, target_mutation_after, \
                 S_total, I_total, M_total, event_times[i]))
 
@@ -364,8 +364,9 @@ def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impa
             peak_inf = I_total
         
         # Logging total results
-        totals_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, S_total, I_total, M_total, event_times[i], n_births, n_deaths, reborn_nodes, removed_nodes))
+        totals_outfile.write('\n%s;%s;%s;%s;%s;%s;%s;%s;%s' % (
+            t, S_total, I_total, M_total, event_times[i], n_births, n_deaths, \
+            ','.join(np.array(reborn_nodes).astype(str)), ','.join(np.array(removed_nodes).astype(str))))
 
     # Closing the data file
     mc_outfile.close()
@@ -386,11 +387,11 @@ def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
     
     # Creating file to write catastrophic event data to
     with open(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), 'w') as event_outfile:
-        event_outfile.write('event_occurred,event_impact')
+        event_outfile.write('event_occurred;event_impact')
 
         # Writing catastrophic event data
         for event_data in list(zip(event_times, event_impact)):
-            event_outfile.write('\n%s,%s' % (event_data))
+            event_outfile.write('\n%s;%s' % (event_data))
 
     # Initialising a variable to store proportition of stochastic extinctions and number of attempts
     no_attempts, no_extinctions = 0, 0
@@ -436,7 +437,7 @@ def get_simulation_parameters(kappa_val, omega_val):
     with open(sim_data_files[0], 'r') as in_file:
 
         # Reading first line
-        data = in_file.readline().strip().split(',')
+        data = in_file.readline().strip().split(';')
 
     # Looping through tuples of the form (parameter_name, value)
     for parameter_data in [parameter.split('=') for parameter in data]:
@@ -451,7 +452,7 @@ def get_simulation_parameters(kappa_val, omega_val):
 def get_events_dataframe(kappa_val, omega_val):
 
     # Reading in the data
-    events_df = pd.read_csv(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), delimiter=',')
+    events_df = pd.read_csv(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), delimiter=';')
     return events_df
 
 
@@ -467,7 +468,7 @@ def get_results_dataframe(kappa_val, omega_val):
     for counter, file in enumerate(sim_data_files):
 
         # Reading in the data
-        current_df = pd.read_csv(file, delimiter=',', skiprows=1)
+        current_df = pd.read_csv(file, delimiter=';', skiprows=1)
 
         # Changing column names to match their origin file (i.e. 'column_name_number')
         new_col_names = [current_df.columns[0]] + [col_name + '_%s' % (counter+1) for col_name in current_df.columns[1:]]
