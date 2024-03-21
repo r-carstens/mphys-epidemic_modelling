@@ -20,7 +20,7 @@ alive = 'alive'
 dead = 'dead'
 
 # Setting population data
-N = 500
+N = 100
 N_alive = int(0.8 * N)
 I0 = 1
 
@@ -152,7 +152,7 @@ def get_birth_dynamics(G, birth_rate):
         # Setting the node to alive
         G.nodes[node]['vitals'] = alive
         
-    return G, n_births
+    return G, n_births, reborn_nodes
         
     
 def get_death_dynamics(G, death_rate):
@@ -173,7 +173,7 @@ def get_death_dynamics(G, death_rate):
         # Setting the node to alive
         G.nodes[node]['vitals'] = dead
         
-    return G, n_deaths
+    return G, n_deaths, removed_nodes
 
 
 ##### STATE CHANGE TESTS
@@ -317,14 +317,14 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
     totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
-    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths,event_occurred')
+    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths,event_occurred,reborn_nodes,removed_nodes')
     
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
         
         # Simulating vital dynamics
-        G, n_births = get_birth_dynamics(G, mu_B)
-        G, n_deaths = get_death_dynamics(G, event_impact[t])
+        G, n_births, reborn_nodes = get_birth_dynamics(G, mu_B)
+        G, n_deaths, removed_nodes = get_death_dynamics(G, event_impact[t])
         
         # Looping through number of nodes
         for n in range(G.number_of_nodes()):
@@ -344,14 +344,16 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
         
             # Logging the mcs results
             mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, source_label, target_label, source_during, target_before, target_after, target_mutation_after, S_total, I_total, M_total, event_times[t]))
+            t, source_label, target_label, source_during, target_before, target_after, target_mutation_after, \
+                S_total, I_total, M_total, event_times[t]))
 
         # Determining if I total is greater than current peak inf
         if I_total > peak_inf:
             peak_inf = I_total
         
         # Logging total results
-        totals_outfile.write('\n%s,%s,%s,%s,%s,%s,%s' % (t, S_total, I_total, M_total, n_births, n_deaths, event_times[t]))
+        totals_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
+            t, S_total, I_total, M_total, n_births, n_deaths, event_times[t], reborn_nodes, removed_nodes))
 
     # Closing the data file
     mc_outfile.close()
