@@ -33,8 +33,8 @@ gamma = 1/7
 sigma = 0
 
 # Setting vital parameters
-mu_B = 0#0.15
-mu_D = 0#0.07
+mu_B = 0.15
+mu_D = 0.07
 
 
 ##### SUBSTITUTION PARAMETERS
