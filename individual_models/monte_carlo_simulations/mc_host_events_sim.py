@@ -20,13 +20,13 @@ alive = 'alive'
 dead = 'dead'
 
 # Setting population data
-N = 1000
+N = 500
 N_alive = int(0.8 * N)
 I0 = 1
 
 # Setting simulation data
 n_iterations = 1
-t_max, dt = 100, 1
+t_max, dt = 20, 0.2
 
 # Setting epidemiological Parameters
 gamma = 1/10
@@ -48,16 +48,16 @@ sub_names = list(string.ascii_lowercase)[1:] + list(string.ascii_uppercase) + li
 
 ##### SIMULATING CATASTROPHIC EVENTS
 
-def get_event_times(sim_time, kappa_val):
+def get_event_times(sim_steps, kappa_val):
 
     # Checking if an event occurs at each timestep
-    return np.random.uniform(size=sim_time) < (kappa_val * dt)
+    return np.random.uniform(size=sim_steps.shape) < (kappa_val * dt)
 
 
-def get_event_impact(sim_time, event_times, omega_val):
+def get_event_impact(sim_steps, event_times, omega_val):
 
     # Initialising an array to store the event impact at each step and increasing rate at step
-    event_impact = np.ones(shape=sim_time) * mu_D
+    event_impact = np.ones(shape=sim_steps.shape) * mu_D
     event_impact[event_times] += omega_val
 
     # Ensuring all rates are reasonable
@@ -91,8 +91,8 @@ def initialise_graph(n_nodes, n_alive):
     dead_nodes = np.setdiff1d(all_nodes, alive_nodes)
 
     # Creating a dictionary to store the node vital signs
-    node_vital_signs = {a_node: {'vitals': alive} for a_node in alive_nodes}
-    node_vital_signs.update({d_node: {'vitals': dead} for d_node in dead_nodes})
+    node_vital_signs = {a_node: {'vitals': alive, 'vital_time': dt} for a_node in alive_nodes}
+    node_vital_signs.update({d_node: {'vitals': dead, 'vital_time': dt} for d_node in dead_nodes})
 
     # Setting the node vital dynamics
     nx.set_node_attributes(G, node_vital_signs)
@@ -134,43 +134,57 @@ def initialise_infections(G, n_nodes, n_infected):
 
 ##### VITAL DYNAMICS
 
-def get_birth_dynamics(G, birth_rate):
-    
-    # Drawing the number of births that will occur in dt from a Poisson dist
-    mean_births = birth_rate * dt
-    n_births = np.random.poisson(mean_births)
+def get_birth_dynamics(G, t, birth_rate):
     
     # Determining all the dead nodes
     dead_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == dead])
     
-    # Randomly choosing nodes to be reborn
-    reborn_nodes = np.random.choice(dead_nodes, size=n_births, replace=False)
+    # Determining how long the nodes have been dead
+    time_of_death = np.array([G.nodes[dead_node]['vital_time'] for dead_node in dead_nodes])
+    duration_removed = t - time_of_death
     
+    # Determining the probability that the nodes will be reborn
+    p_births = 1 - np.exp(-birth_rate * duration_removed)
+    check_for_birth = np.random.uniform(size=p_births.shape) < p_births
+
+    # Finding which nodes are reborn and the number of births
+    reborn_nodes = dead_nodes[check_for_birth]
+    n_births = np.count_nonzero(check_for_birth)
+
     # Looping through the reborn nodes
     for node in reborn_nodes:
         
         # Setting the node to alive
+        G.nodes[node]['vital_time'] = t
         G.nodes[node]['vitals'] = alive
+        G.nodes[node]['state'] = susceptible
+        G.nodes[node]['mutation'] = ''
         
     return G, n_births, reborn_nodes
-        
-    
-def get_death_dynamics(G, death_rate):
-    
-    # Drawing the number of deaths that will occur in dt from a Poisson dist
-    mean_deaths = death_rate * dt
-    n_deaths = np.random.poisson(mean_deaths)
+
+
+def get_death_dynamics(G, t, death_rate):
     
     # Determining all the living nodes
     living_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == alive])
     
-    # Randomly choosing nodes to be removed
-    removed_nodes = np.random.choice(living_nodes, size=n_deaths, replace=False)
+    # Determining how long the nodes have been alive
+    time_of_birth = np.array([G.nodes[alive_node]['vital_time'] for alive_node in living_nodes])
+    duration_removed = t - time_of_birth
     
-    # Looping through the reborn nodes
+    # Determining the probability that the nodes will be reborn
+    p_deaths = 1 - np.exp(-death_rate * duration_removed)
+    check_for_death = np.random.uniform(size=p_deaths.shape) < p_deaths
+
+    # Finding which nodes are removed and the number of deaths
+    removed_nodes = living_nodes[check_for_death]
+    n_deaths = np.count_nonzero(check_for_death)
+
+    # Looping through the removed nodes
     for node in removed_nodes:
         
-        # Setting the node to alive
+        # Setting the node to dead
+        G.nodes[node]['vital_time'] = t
         G.nodes[node]['vitals'] = dead
         
     return G, n_deaths, removed_nodes
@@ -227,7 +241,7 @@ def check_for_mutation():
 def complete_step(G, t, sub_counter):
 
     # Finding all living nodes
-    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == alive])
     
     # Choosing two neighbours at random within the population
     source_node, target_node = np.random.choice(living_nodes, size=2, replace=False)
@@ -301,30 +315,28 @@ def get_state_totals(G):
     return S_total, I_total, M_total
 
 
-def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact, kappa_val, omega_val, iter_num):
+def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impact, kappa_val, omega_val, iter_num):
 
-    # Variable to store substitutions
+    # Variables to store substitutions and to check for stochastic extinction
     sub_counter = 0
-    
-    # Variable to be used to check for stochastic extinction
     peak_inf = 0
 
     # Creating a file to store the mc results to
     mc_outfile = open(mc_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
-    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
+    mc_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
     mc_outfile.write('\ntimestep,source_label,target_label,source_during,target_before,target_after,target_mutation_after,S_total,I_total,M_total,event_occurred')
 
     # Creating a file to store the total results to
     totals_outfile = open(totals_file_path + '_k-%s_om-%s_%s.txt' % (kappa_val, omega_val, (iter_num + 1)), 'w')
-    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, sim_time, gamma, sigma, kappa_val, omega_val))
-    totals_outfile.write('\ntimestep,S_total,I_total,M_total,n_births,n_deaths,event_occurred,reborn_nodes,removed_nodes')
+    totals_outfile.write('N=%s,I0=%s,t_max=%s,gamma=%s,sigma=%s,kappa=%s,omega=%s' % (n_nodes, I0, t_max, gamma, sigma, kappa_val, omega_val))
+    totals_outfile.write('\ntimestep,S_total,I_total,M_total,event_occurred,n_births,n_deaths,reborn_nodes,removed_nodes')
     
     # Looping through timesteps
-    for t in tqdm(range(sim_time)):
+    for i, t in enumerate(tqdm(time_array)):
         
         # Simulating vital dynamics
-        G, n_births, reborn_nodes = get_birth_dynamics(G, mu_B)
-        G, n_deaths, removed_nodes = get_death_dynamics(G, event_impact[t])
+        G, n_births, reborn_nodes = get_birth_dynamics(G, t, mu_B)
+        G, n_deaths, removed_nodes = get_death_dynamics(G, t, event_impact[i])
         
         # Looping through number of nodes
         for n in range(G.number_of_nodes()):
@@ -337,7 +349,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
             if target_before != target_after:
                 G.nodes[target_label]['state'] = target_after
                 G.nodes[target_label]['mutation'] = target_mutation_after
-                G.nodes[target_label]['time_in_state'] = dt * t
+                G.nodes[target_label]['time_in_state'] = t
     
             # Counting the number of individuals in each state
             S_total, I_total, M_total = get_state_totals(G)
@@ -345,7 +357,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
             # Logging the mcs results
             mc_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
             t, source_label, target_label, source_during, target_before, target_after, target_mutation_after, \
-                S_total, I_total, M_total, event_times[t]))
+                S_total, I_total, M_total, event_times[i]))
 
         # Determining if I total is greater than current peak inf
         if I_total > peak_inf:
@@ -353,7 +365,7 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
         
         # Logging total results
         totals_outfile.write('\n%s,%s,%s,%s,%s,%s,%s,%s,%s' % (
-            t, S_total, I_total, M_total, n_births, n_deaths, event_times[t], reborn_nodes, removed_nodes))
+            t, S_total, I_total, M_total, event_times[i], n_births, n_deaths, reborn_nodes, removed_nodes))
 
     # Closing the data file
     mc_outfile.close()
@@ -365,9 +377,12 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
 
 def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
 
+    # Setting the simulation time array
+    sim_steps = np.arange(t_max, step=dt)
+
     # Determining event impact for simulations
-    event_times = get_event_times(t_max, kappa_val)
-    event_impact = get_event_impact(t_max, event_times, omega_val)
+    event_times = get_event_times(sim_steps, kappa_val)
+    event_impact = get_event_impact(sim_steps, event_times, omega_val)
     
     # Creating file to write catastrophic event data to
     with open(event_path + '_k-%s_om-%s.txt' % (kappa_val, omega_val), 'w') as event_outfile:
@@ -397,7 +412,7 @@ def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
             G = initialise_infections(G, n_nodes=N, n_infected=I0)
 
             # Running the current iteration
-            was_extinct = run_simulation_iteration(G, N, I0, t_max, event_times, event_impact, kappa_val, omega_val, n)
+            was_extinct = run_simulation_iteration(G, N, I0, sim_steps, event_times, event_impact, kappa_val, omega_val, n)
 
             # Updating the number of extinctions if required
             if was_extinct:
@@ -537,3 +552,5 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
 plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
+
+
