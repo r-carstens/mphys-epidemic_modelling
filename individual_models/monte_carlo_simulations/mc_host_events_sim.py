@@ -12,14 +12,16 @@ mc_file_path = 'sim_with_hosts_mc'
 totals_file_path = 'sim_with_hosts_totals'
 event_path = 'host_events'
 
-# Initialising possible infection states
+# Setting state labels
 susceptible = 'S'
 infected = 'I'
 immune = 'M'
+alive = 'alive'
+dead = 'dead'
 
 # Setting population data
-N = 250
-N_alive = int(1 * N)
+N = 500
+N_alive = int(0.8 * N)
 I0 = 1
 
 # Setting simulation data
@@ -28,11 +30,11 @@ t_max, dt = 100, 1
 
 # Setting epidemiological Parameters
 gamma = 1/7
-sigma = 0.5
+sigma = 0
 
 # Setting vital parameters
-mu_B = 0.07
-mu_D = 0.04
+mu_B = 0#0.15
+mu_D = 0#0.07
 
 
 ##### SUBSTITUTION PARAMETERS
@@ -78,24 +80,19 @@ def get_mosquito_transmission_rate():
     return (m * a**2 * b * c) * life_exp
 
 
-def get_mosquito_transmission_probabilitity(rate):
-
-    # Assuming exponentially-distributed
-    return 1 - np.exp(-rate * dt)
-
-
 def initialise_graph(n_nodes, n_alive):
 
     # Initialising the network structure so that each node is connected to all other nodes
-    G = nx.complete_graph(n=n_nodes)
+    G = nx.complete_graph(n_nodes)
+    all_nodes = np.arange(n_nodes)
 
     # Randomly choosing n_alive nodes and letting the remaining nodes be initially dead
-    alive_nodes = np.random.choice(np.arange(n_nodes), size=n_alive, replace=False)
-    dead_nodes = np.setdiff1d(np.arange(n_nodes), alive_nodes)
+    alive_nodes = np.random.choice(all_nodes, size=n_alive, replace=False)
+    dead_nodes = np.setdiff1d(all_nodes, alive_nodes)
 
     # Creating a dictionary to store the node vital signs
-    node_vital_signs = {a_node: {'vitals': 'alive'} for a_node in alive_nodes}
-    node_vital_signs.update({d_node: {'vitals': 'dead'} for d_node in dead_nodes})
+    node_vital_signs = {a_node: {'vitals': alive} for a_node in alive_nodes}
+    node_vital_signs.update({d_node: {'vitals': dead} for d_node in dead_nodes})
 
     # Setting the node vital dynamics
     nx.set_node_attributes(G, node_vital_signs)
@@ -103,12 +100,8 @@ def initialise_graph(n_nodes, n_alive):
     # Looping through all edges
     for u, v in G.edges():
 
-        # Determining the mosquito transmission rate and probability
-        m_rate = get_mosquito_transmission_rate()
-        m_prob = get_mosquito_transmission_probabilitity(m_rate)
-
         # Adding weights to the edges to represent mosquito transmission
-        G[u][v]['weight'] = m_prob
+        G[u][v]['weight'] = get_mosquito_transmission_rate()
 
     return G
 
@@ -116,7 +109,7 @@ def initialise_graph(n_nodes, n_alive):
 def initialise_infections(G, n_nodes, n_infected):
 
     # Determining all living nodes
-    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
+    living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == alive])
 
     # Randomly infecting living nodes
     random_infected_nodes = np.random.choice(living_nodes, size=n_infected, replace=False)
@@ -126,76 +119,98 @@ def initialise_infections(G, n_nodes, n_infected):
 
         # Checking if current node was chosen to be infected
         if node in random_infected_nodes:
-            G.nodes()[node]['state'] = infected
-            G.nodes()[node]['mutation'] = 'a'
+            G.nodes[node]['state'] = infected
+            G.nodes[node]['mutation'] = 'a'
+            G.nodes[node]['time_in_state'] = 1
 
         # Otherwise making node susceptible
         else:
-            G.nodes()[node]['state'] = susceptible
-            G.nodes()[node]['mutation'] = ''
+            G.nodes[node]['state'] = susceptible
+            G.nodes[node]['mutation'] = ''
+            G.nodes[node]['time_in_state'] = 1
 
     return G
 
 
 ##### VITAL DYNAMICS
 
-def get_potential_node_birth(G, node_label):
-
-    # Determining the current birth probability
-    p_birth = 1 - np.exp(-mu_B * dt)
-
-    # Determining whether a birth occurred
-    has_birth_occurred = np.random.uniform() < p_birth
-
-    # Updating node if birth occurred
-    if has_birth_occurred:
-        G.nodes()[node_label]['vitals'] = 'alive'
-        G.nodes()[node_label]['state'] = susceptible
-        G.nodes()[node_label]['mutation'] = ''
+def get_birth_dynamics(G, birth_rate):
+    
+    # Drawing the number of births that will occur in dt from a Poisson dist
+    mean_births = birth_rate * dt
+    n_births = np.random.poisson(mean_births)
+    
+    # Determining all the dead nodes
+    dead_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == dead])
+    
+    # Randomly choosing nodes to be reborn
+    reborn_nodes = np.random.choice(dead_nodes, size=n_births, replace=False)
+    
+    # Looping through the reborn nodes
+    for node in reborn_nodes:
         
-    return G, int(has_birth_occurred)
-
-
-def get_potential_node_death(G, node_label, event_impact):
-
-    # Determining the current death probability
-    p_death = 1 - np.exp(-event_impact * dt)
-
-    # Determining whether a death occurred
-    has_death_occurred = np.random.uniform() < p_death
-
-    # Updating node if death occurred
-    if has_death_occurred:
-        G.nodes()[node_label]['vitals'] = 'dead'
+        # Setting the node to alive
+        G.nodes[node]['vitals'] = alive
         
-    return G, int(has_death_occurred)
+    return G, n_births
+        
+    
+def get_death_dynamics(G, death_rate):
+    
+    # Drawing the number of deaths that will occur in dt from a Poisson dist
+    mean_deaths = death_rate * dt
+    n_deaths = np.random.poisson(mean_deaths)
+    
+    # Determining all the living nodes
+    living_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == alive])
+    
+    # Randomly choosing nodes to be removed
+    removed_nodes = np.random.choice(living_nodes, size=n_deaths, replace=False)
+    
+    # Looping through the reborn nodes
+    for node in removed_nodes:
+        
+        # Setting the node to alive
+        G.nodes[node]['vitals'] = dead
+        
+    return G, n_deaths
 
 
 ##### STATE CHANGE TESTS
 
-def check_for_infection(G, source_label, target_label, reinfection):
+def get_mosquito_transmission_probabilitity(rate, time_infected):
+
+    # Assuming exponentially-distributed
+    return 1 - np.exp(-rate * time_infected)
+
+
+def check_for_infection(G, source_label, target_label, time, reinfection):
 
     # Initialising variable
     infection_event = False
 
-    # Determining the probability of transmission along the node edge
-    p_mosquito_transmission = G[source_label][target_label]['weight']
+    # Determining the rate of mosquito transmission across the edge and the source's infectious duration
+    rate_transmission = G[source_label][target_label]['weight']
+    source_infectious_period = time - G.nodes[source_label]['time_in_state']
+    
+    # Determining the probability of transmission across the edge
+    p_transmission = get_mosquito_transmission_probabilitity(rate_transmission, source_infectious_period)
 
     # Checking if the event is a reinfection (in which immunity loss is taken into account)
     if reinfection:
-        p_mosquito_transmission *= sigma
+        p_transmission *= sigma
 
     # Checking if an infection will occur
-    if np.random.uniform() < p_mosquito_transmission:
+    if np.random.uniform() < p_transmission:
         infection_event = True
 
     return infection_event
 
 
-def check_for_recovery():
+def check_for_recovery(time_infected):
 
     # Converting rate to probability
-    p_recovery = 1 - np.exp(-gamma * dt)
+    p_recovery = 1 - np.exp(-gamma * time_infected)
 
     # Checking if the infected individual has recovery with probability gamma
     return np.random.uniform() < p_recovery
@@ -209,7 +224,7 @@ def check_for_mutation():
 
 ##### RUNNING THE SIMULATION
 
-def complete_step(G, sub_counter):
+def complete_step(G, t, sub_counter):
 
     # Finding all living nodes
     living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == 'alive'])
@@ -229,7 +244,7 @@ def complete_step(G, sub_counter):
     if target_before == susceptible and source_during == infected:
 
         # Determining if the node being interacted with is infected and infection is transmitted
-        if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=False):
+        if check_for_infection(G, source_node, target_node, t, reinfection=False):
 
             # Initialising new data
             target_after = infected
@@ -244,9 +259,12 @@ def complete_step(G, sub_counter):
 
     # Checking if node is I
     elif target_before == infected:
+        
+        # Determining the duration of time that the node has been infectious
+        time_infected = t - G.nodes[target_node]['time_in_state']
 
         # Checking for recovery
-        if check_for_recovery():
+        if check_for_recovery(time_infected):
             target_after = immune
             target_mutation_after = ''
 
@@ -254,7 +272,7 @@ def complete_step(G, sub_counter):
     elif target_before == immune and source_during == infected:
 
         # Determining if the node being interacted with is infected and infection is transmitted
-        if check_for_infection(G, source_label=source_node, target_label=target_node, reinfection=True):
+        if check_for_infection(G, source_node, target_node, t, reinfection=True):
 
             # Initialising new data
             target_after = infected
@@ -303,30 +321,23 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
     
     # Looping through timesteps
     for t in tqdm(range(sim_time)):
-
-        # Initialising iteration births and deaths
-        n_births = n_deaths = 0
-
+        
+        # Simulating vital dynamics
+        G, n_births = get_birth_dynamics(G, mu_B)
+        G, n_deaths = get_death_dynamics(G, event_impact[t])
+        
         # Looping through number of nodes
         for n in range(G.number_of_nodes()):
-
-            # Checking if dead node is reborn
-            if G.nodes()[n]['vitals'] == 'dead':
-                G, is_birth = get_potential_node_birth(G, n)
-                n_births += is_birth
-
-            # Checking if living node dies
-            else:
-                G, is_death = get_potential_node_death(G, n, event_impact[t])
-                n_deaths += is_death
-                
+            
             # Completing an iteration step
-            G, source_label, target_label, source_during, target_before, target_after, target_mutation_after, sub_counter = complete_step(G, sub_counter)
+            G, source_label, target_label, source_during, target_before, target_after, \
+                target_mutation_after, sub_counter = complete_step(G, t, sub_counter)
             
             # Updating network if required
             if target_before != target_after:
-                G.nodes()[target_label]['state'] = target_after
-                G.nodes()[target_label]['mutation'] = target_mutation_after
+                G.nodes[target_label]['state'] = target_after
+                G.nodes[target_label]['mutation'] = target_mutation_after
+                G.nodes[target_label]['time_in_state'] = t
     
             # Counting the number of individuals in each state
             S_total, I_total, M_total = get_state_totals(G)
@@ -347,8 +358,8 @@ def run_simulation_iteration(G, n_nodes, I0, sim_time, event_times, event_impact
     totals_outfile.close()
 
     # Returning whether an extinction event occurred
-    return peak_inf < 2
-    
+    return peak_inf < 10
+
 
 def repeat_simulation(N, I0, t_max, kappa_val, omega_val, num_iterations=1):
 
@@ -524,3 +535,4 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
 plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
+        
