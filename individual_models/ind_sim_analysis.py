@@ -41,7 +41,7 @@ def get_simulation_parameters(filename):
     with open(filename, 'r') as in_file:
 
         # Reading first line
-        data = in_file.readline().strip().split(',')
+        data = in_file.readline().strip().split(';')
 
     # Looping through tuples of the form (parameter_name, value)
     for parameter_data in [parameter.split('=') for parameter in data]:
@@ -56,7 +56,7 @@ def get_simulation_parameters(filename):
 def get_infection_df(filename):
 
     # Importing transmission data and only retaining infection events
-    df = pd.read_csv(filename, delimiter=',', skiprows=1)
+    df = pd.read_csv(filename, delimiter=';', skiprows=1)
     infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'].isin([susceptible, immune])) & (df['target_after'] == infected)]
 
     return infection_df
@@ -81,7 +81,7 @@ def get_transmission_dict(infection_df):
         was_reinfection = (infection_df['target_before'][ind] == immune)
 
         # Extracting whether an event occurred
-        was_event = infection_df['event_occurred']
+        was_event = infection_df['event_occurred'][ind]
 
         # Storing the results
         transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'transmitted_pathogen': current_pathogen, 
@@ -312,33 +312,10 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
 
 ##### MODELLING VARIANT EMERGENCE
 
-def get_percentage_intervals(tree, t1_percent=0.5, t2_percent=0.55, delta_t_percent=0.2):
+def get_snapshot_variants(tree, t1_step, t2_step):
 
-    # Sorting the tree edges
-    sorted_tree_edges = get_sorted_tree_edges(tree)
-
-    # Determining all event timesteps and the number of events
-    all_timesteps = [data['timestep'] for source_label, target_label, data in sorted_tree_edges]
-    n_timesteps = len(all_timesteps)
-
-    # Determining the timewindow reach
-    delta_t = int(delta_t_percent * n_timesteps)
-
-    # Determining when the time intervals will be set
-    t1 = int(t1_percent * n_timesteps)
-    t2 = int(t2_percent * n_timesteps)
-
-    # Determining the time at the intervals
-    t1_step = all_timesteps[t1]
-    t2_step = all_timesteps[t2]
-
-    return t1_step, t2_step, delta_t
-
-
-def get_t1_ancestor_variants(tree, t1_step):
-
-    # Creating a structure to store each host's final variant at t1
-    variants_at_t1 = dict()
+    # Creating a structure to store the variants within the timestep
+    snapshot_variants = dict()
 
     # Looping through nodes
     for node_label, node_data in tree.nodes(data=True):
@@ -346,50 +323,115 @@ def get_t1_ancestor_variants(tree, t1_step):
         # Looping through the node's pathogen history
         for path_t, path_name in node_data['pathogen_history'].items():
 
-            # Checking if the current pathogen is before the final point
-            if path_t < t1_step:
-                variants_at_t1[path_name] = path_t
+            # Checking if the current pathogen is within the time frame
+            if t1_step < path_t < t2_step:
+                snapshot_variants[path_name] = path_t
 
-    return variants_at_t1
+    return snapshot_variants
+
+
+def get_phylo_matrix(variants_at_t1, phylo_tree):
+    
+    # Determining the number of variants
+    n_variants = len(variants_at_t1.keys())
+
+    # Creating a matrix to store the phylogenetic distances
+    phylo_matrix = np.zeros(shape=(n_variants, n_variants))
+    
+    # Looping through the keys
+    for i, var_i in enumerate(variants_at_t1.keys()):
+        for j, var_j in enumerate(variants_at_t1.keys()):
             
+            # Determining the phylogenetic distance between the variants at i, j
+            phylo_matrix[i, j] = nx.shortest_path_length(phylo_tree, source=var_i, target=var_j)
 
-def get_variant_source_numbers(tree, t2_step, variants_at_t1):
-
-    # Extracting all possible pathogens from t1 and creating a dictionary to store frequencies
-    all_t1_pathogens = np.array(list(variants_at_t1.keys()))
-    variant_numbers = dict()
-
-    # Looping through nodes
-    for node_label, node_data in tree.nodes(data=True):
-
-        # Finding the final pathogen before t2
-        final_pathogen = ''
-
-        # Looping through the node's pathogen history
-        for path_t, path_name in node_data['pathogen_history'].items():
-
-            # Checking if the current pathogen is before the final point
-            if path_t < t2_step:
-                final_pathogen = path_name
-
-        # Checking if the result is in the dictionary
-        if final_pathogen in variant_numbers:
-            variant_numbers[final_pathogen] += 1
-
-        # Initialising variant otherwise
-        else:
-            variant_numbers[final_pathogen] = 0
-
-    return variant_numbers
+    return phylo_matrix
 
 
-def get_variant_proportions(variant_numbers):
+def get_threshold_matrix(dist_matrix, threshold):
+    
+    # Making a copy of the matrix
+    th_matrix = np.zeros(shape=dist_matrix.shape)
+    
+    # Looping through the matrix
+    for i in range(len(th_matrix)):
+        for j in range(len(th_matrix)):
+            
+            # Setting all locations above the threshold to zero
+            if dist_matrix[i, j] >= threshold:
+                th_matrix[j, i] = 1
 
-    # Creating an array to store all non-zero totals and finding their proportions
-    total_sources = np.array([total for key, total in variant_numbers.items() if total > 0])
-    proportional_sources = total_sources / np.sum(total_sources)
+    # Converting the adjacency matrix into a graph
+    th_network = nx.from_numpy_array(th_matrix)
+    return th_network
 
-    return proportional_sources
+
+def get_threshold_components(distance_matrix):
+    
+    # Determining the maximum distance and creating a counter to loop through distance thresholds
+    max_dist = np.max(distance_matrix)
+    
+    # Creating arrays to store the results
+    threshold_distances = np.arange(stop=(max_dist + 1)).astype(int)
+    threshold_components = np.zeros(shape=threshold_distances.shape)
+    
+    # Looping through the threshold distances
+    for dist_threshold in threshold_distances:
+    
+        # Determining the corresponding threshold network
+        threshold_network = get_threshold_matrix(distance_matrix, threshold=dist_threshold)
+        
+        # Determining the number of components and storing the results
+        n_components = nx.number_connected_components(threshold_network)
+        threshold_components[dist_threshold] = n_components
+        
+    # Determining the maximum threshold distance and extracting the threshold network at that point
+    best_threshold = np.argmax(threshold_distances)
+    best_network = get_threshold_matrix(distance_matrix, threshold=threshold_distances[best_threshold])
+    
+    return threshold_components, threshold_distances, best_network
+    
+        
+def get_shannon_entropies(n_components):
+    
+    # Creating an array to store the results
+    shannon_entropies = np.zeros(shape=n_components.shape)
+    
+    # Looping through the component numbers
+    for i in range(len(n_components)):
+        
+        # Extracting the components up to the current distance
+        required_components = n_components[:i+1]
+        
+        # Determining the proportion and log prop of each number of components
+        proportions = required_components / np.sum(required_components)
+        log_proportions = np.log(proportions)
+        
+        # Determining the current Shannon entropy and storing the results
+        current_entropy = - np.sum(proportions * log_proportions)
+        shannon_entropies[i] = current_entropy
+        
+    return shannon_entropies
+        
+        
+def get_main_variant(n_components, shannon_entropies):
+    
+    # Determining the location with the greatest shannon entropy and the corresponding component size
+    greatest_entropy_loc = np.argmax(shannon_entropies)
+    largest_variant = n_components[greatest_entropy_loc]
+    
+    return largest_variant
+
+
+def get_snapshot_voc(n_components):
+
+    # Determining the Shannon entropies
+    shannon_entropies = get_shannon_entropies(n_components)
+
+    # Determining the largest component
+    largest_component = get_main_variant(n_components, shannon_entropies)
+    
+    return largest_component
 
 
 def get_effective_number(prop_infections, q=2):
@@ -411,21 +453,20 @@ def get_effective_number(prop_infections, q=2):
     return diversity
 
 
-def get_all_variant_diversity_numbers(infection_numbers):
-
-    # Extracting the different infection source totals
-    inf_totals = np.array([number for pathogen, number in infection_numbers.items()])
-    prop_infections = inf_totals / len(inf_totals)
-
+def get_snapshot_diversities(n_components):
+    
+    # Determining the proportions of each component
+    proportions = n_components / np.sum(n_components)
+    
     # Determining the different diversity measures
-    div_q0 = get_effective_number(prop_infections, q=0)
-    div_q1 = get_effective_number(prop_infections, q=1)
-    div_q2 = get_effective_number(prop_infections, q=2)
+    q0_div = get_effective_number(proportions, q=0)
+    q1_div = get_effective_number(proportions, q=1)
+    q2_div = get_effective_number(proportions, q=2)
+    
+    return q0_div, q1_div, q2_div
 
-    return div_q0, div_q1, div_q2
-
-
-################################################## MAIN FUNCTIONS
+    
+##### MAIN FUNCTIONS
 
 def get_trees(filename, check_for_cross_immunity):
 
@@ -450,6 +491,26 @@ def get_trees(filename, check_for_cross_immunity):
     return inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree
 
 
+def get_variant_analysis(tree, t1_step, t2_step):
+    
+    # Determining the variants at the timestep and their antigenic distances
+    snapshot_variants = get_snapshot_variants(tree, t1_step, t2_step)
+    
+    # Getting the phylogenetic distances between the variants
+    distance_matrix = get_phylo_matrix(snapshot_variants, phylogenetic_tree)
+
+    # Determining the threshold component results
+    n_components, thresholds, best_network = get_threshold_components(distance_matrix)
+    
+    # Determining the voc
+    snapshot_voc = get_snapshot_voc(n_components)
+    
+    # Determining the snapshot diversities
+    q0_div, q1_div, q2_div = get_snapshot_diversities(n_components)
+    
+    return snapshot_voc, q0_div, q1_div, q2_div
+
+
 ################################################## MAIN
 
 # Finding all files
@@ -467,3 +528,5 @@ for counter, filename in enumerate(tqdm(sim_data_files)):
     check_for_cross_immunity = (parameters_dict['sigma'] != 0)
     inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree = get_trees(filename, check_for_cross_immunity)
     
+    # Analysing the variants
+    snapshot_voc, q0_div, q1_div, q2_div = get_variant_analysis(transmission_tree, t1_step=50000, t2_step=51000)
