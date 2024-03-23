@@ -331,6 +331,7 @@ def get_snapshot_variants(tree, t_step):
         # Looping through the node's pathogen history
         for path_t, path_name in node_data['pathogen_history'].items():
 
+            # Checking if the variant existed at the timestep
             if path_t == t_step:
                 snapshot_variants[path_name] = path_t
 
@@ -505,19 +506,24 @@ def get_variant_analysis(tree, t_step):
     # Determining the variants at the timestep and their antigenic distances
     snapshot_variants = get_snapshot_variants(tree, t_step)
     
-    # Getting the phylogenetic distances between the variants
-    distance_matrix = get_phylo_matrix(snapshot_variants, phylogenetic_tree)
-
-    # Determining the threshold component results
-    n_components, thresholds, best_network = get_threshold_components(distance_matrix)
+    if len(snapshot_variants.keys()) == 0:
+        return 0, 0, 0, 0
     
-    # Determining the voc
-    snapshot_voc = get_snapshot_voc(n_components)
+    else:
     
-    # Determining the snapshot diversities
-    q0_div, q1_div, q2_div = get_snapshot_diversities(n_components)
+        # Getting the phylogenetic distances between the variants
+        distance_matrix = get_phylo_matrix(snapshot_variants, phylogenetic_tree)
 
-    return snapshot_voc, q0_div, q1_div, q2_div
+        # Determining the threshold component results
+        n_components, thresholds, best_network = get_threshold_components(distance_matrix)
+
+        # Determining the voc
+        snapshot_voc = get_snapshot_voc(n_components)
+
+        # Determining the snapshot diversities
+        q0_div, q1_div, q2_div = get_snapshot_diversities(n_components)
+
+        return snapshot_voc, q0_div, q1_div, q2_div
 
 
 def get_all_timesteps(tree):
@@ -529,10 +535,10 @@ def get_all_timesteps(tree):
     return unique_timesteps
     
     
-def get_variant_evolution(tree):
+def get_variant_evolution(tree, all_timesteps):
     
     # Determining all timesteps
-    all_timesteps = get_all_timesteps(tree)
+#     all_timesteps = get_all_timesteps(tree)
     
     # Creating structures to store the results
     vocs, q0s, q1s, q2s = [], [], [], []
@@ -571,6 +577,7 @@ def get_event_locs(filename):
 sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(mc_file_path)]
 
 # Creating lists to store the results
+all_timesteps = np.arange(20, step=0.2)
 all_vocs = []
 
 # Looping through files
@@ -586,14 +593,13 @@ for counter, filename in enumerate(tqdm(sim_data_files)):
     inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree = get_trees(filename, check_for_cross_immunity)
     
     # Analysing the variants
-    vocs, q0s, q1s, q2s = get_variant_evolution(transmission_tree)
+    vocs, q0s, q1s, q2s = get_variant_evolution(transmission_tree, all_timesteps)
 
     # Storing the results
     all_vocs.append(vocs)
 
 
 # Determining all simulation timesteps and creating a list to store total vocs
-all_timesteps = get_all_timesteps(transmission_tree)
 total_vocs = np.zeros(shape=all_timesteps.shape)
 
 # Looping throught the variant results
