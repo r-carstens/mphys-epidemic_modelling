@@ -320,7 +320,7 @@ def get_cross_immunity_tree(sub_tree, phylo_tree):
 
 ##### MODELLING VARIANT EMERGENCE
 
-def get_snapshot_variants(tree, t1_step, t2_step):
+def get_snapshot_variants(tree, t_step):
 
     # Creating a structure to store the variants within the timestep
     snapshot_variants = dict()
@@ -331,8 +331,7 @@ def get_snapshot_variants(tree, t1_step, t2_step):
         # Looping through the node's pathogen history
         for path_t, path_name in node_data['pathogen_history'].items():
 
-            # Checking if the current pathogen is within the time frame
-            if t1_step < path_t < t2_step:
+            if path_t == t_step:
                 snapshot_variants[path_name] = path_t
 
     return snapshot_variants
@@ -428,7 +427,9 @@ def get_main_variant(n_components, shannon_entropies):
     greatest_entropy_loc = np.argmax(shannon_entropies)
     largest_variant = n_components[greatest_entropy_loc]
     
-    return largest_variant
+    return np.max(n_components)
+    
+#     return largest_variant
 
 
 def get_snapshot_voc(n_components):
@@ -499,10 +500,10 @@ def get_trees(filename, check_for_cross_immunity):
     return inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree
 
 
-def get_variant_analysis(tree, t1_step, t2_step):
+def get_variant_analysis(tree, t_step):
     
     # Determining the variants at the timestep and their antigenic distances
-    snapshot_variants = get_snapshot_variants(tree, t1_step, t2_step)
+    snapshot_variants = get_snapshot_variants(tree, t_step)
     
     # Getting the phylogenetic distances between the variants
     distance_matrix = get_phylo_matrix(snapshot_variants, phylogenetic_tree)
@@ -515,7 +516,7 @@ def get_variant_analysis(tree, t1_step, t2_step):
     
     # Determining the snapshot diversities
     q0_div, q1_div, q2_div = get_snapshot_diversities(n_components)
-    
+
     return snapshot_voc, q0_div, q1_div, q2_div
 
 
@@ -537,14 +538,10 @@ def get_variant_evolution(tree):
     vocs, q0s, q1s, q2s = [], [], [], []
     
     # Looping through the timesteps
-    for i in range(1, len(all_timesteps) - 2):
-        
-        # Extracting the current windows
-        t1_step = all_timesteps[i]
-        t2_step = all_timesteps[i+2]
+    for t in all_timesteps:
         
         # Determining the current variant analysis
-        snapshot_voc, q0_div, q1_div, q2_div = get_variant_analysis(tree, t1_step, t2_step)
+        snapshot_voc, q0_div, q1_div, q2_div = get_variant_analysis(tree, t)
         
         # Storing the results
         vocs.append(snapshot_voc)
@@ -590,7 +587,7 @@ for counter, filename in enumerate(tqdm(sim_data_files)):
     
     # Analysing the variants
     vocs, q0s, q1s, q2s = get_variant_evolution(transmission_tree)
-    
+
     # Storing the results
     all_vocs.append(vocs)
 
@@ -609,7 +606,7 @@ for current_vocs in all_vocs:
 # Overplotting the event locations
 for event in get_event_locs(filename):
     plt.vlines(x=event, ymin=0, ymax=np.max(vocs), linestyle='dashed')
-    
+            
 # Determining the average result and plotting
 average_vocs = total_vocs / len(all_vocs)
 plt.plot(all_timesteps, average_vocs, color='firebrick')
