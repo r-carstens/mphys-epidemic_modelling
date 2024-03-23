@@ -429,7 +429,6 @@ def get_main_variant(n_components, shannon_entropies):
     largest_variant = n_components[greatest_entropy_loc]
     
     return np.max(n_components)
-    
 #     return largest_variant
 
 
@@ -526,19 +525,7 @@ def get_variant_analysis(tree, t_step):
         return snapshot_voc, q0_div, q1_div, q2_div
 
 
-def get_all_timesteps(tree):
-    
-    # Determining the timesteps
-    all_timesteps = np.array([data['timestep'] for u, v, data in tree.edges(data=True)])
-    unique_timesteps = np.unique(all_timesteps)
-    
-    return unique_timesteps
-    
-    
 def get_variant_evolution(tree, all_timesteps):
-    
-    # Determining all timesteps
-#     all_timesteps = get_all_timesteps(tree)
     
     # Creating structures to store the results
     vocs, q0s, q1s, q2s = [], [], [], []
@@ -555,6 +542,13 @@ def get_variant_evolution(tree, all_timesteps):
         q1s.append(q1_div)
         q2s.append(q2_div)
         
+    # Correcting zeros
+    for i in range(len(vocs)):
+        
+        if i > 2 and vocs[i] == 0:
+            vocs[i] = vocs[i-1] if vocs[i-1] != 0 else vocs[i+1]
+            
+            
     return vocs, q0s, q1s, q2s
 
 
