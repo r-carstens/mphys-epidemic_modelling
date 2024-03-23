@@ -57,7 +57,9 @@ def get_infection_df(filename):
 
     # Importing transmission data and only retaining infection events
     df = pd.read_csv(filename, delimiter=';', skiprows=1)
-    infection_df = df.loc[(df['source_during'] == infected) & (df['target_before'].isin([susceptible, immune])) & (df['target_after'] == infected)]
+    infection_df = df.loc[(df['source_during'] == infected) \
+                          & (df['target_before'].isin([susceptible, immune])) \
+                          & (df['target_after'] == infected)]
 
     return infection_df
     
@@ -69,6 +71,9 @@ def get_transmission_dict(infection_df):
 
     # Looping through data file in order of increasing time
     for ind in infection_df.index:
+        
+        # Extracting the timestep
+        t = infection_df['timestep'][ind]
         
         # Extracting the source and target node labels
         source_label = infection_df['source_label'][ind]
@@ -84,8 +89,9 @@ def get_transmission_dict(infection_df):
         was_event = infection_df['event_occurred'][ind]
 
         # Storing the results
-        transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'transmitted_pathogen': current_pathogen, 
-                                  'was_reinfection': was_reinfection, 'was_event': was_event}
+        transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'timestep': t,
+                                  'transmitted_pathogen': current_pathogen, 'was_reinfection': was_reinfection,
+                                  'was_event': was_event}
 
     return transmission_dict
 
@@ -96,13 +102,15 @@ def get_transmission_tree(transmission_dict):
     transmission_tree = nx.MultiDiGraph()
     
     # Looping through data in order of increasing time
-    for t, data in transmission_dict.items():
+    for t_ind, data in transmission_dict.items():
     
         # Extracting the data from the current event
-        source_label, target_label, current_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
+        source_label, target_label, timestep, current_pathogen, reinfection_occurred, \
+        was_event = [value for key, value in data.items()]
     
         # Adding an edge between the current source and target nodes and attributing the timestep
-        transmission_tree.add_edge(source_label, target_label, timestep=t, transmitted_path=current_pathogen, was_reinfection=reinfection_occurred, was_event=was_event)
+        transmission_tree.add_edge(source_label, target_label, timestep=timestep, \
+                                   transmitted_path=current_pathogen, was_reinfection=reinfection_occurred, was_event=was_event)
 
     return transmission_tree
 
@@ -511,10 +519,62 @@ def get_variant_analysis(tree, t1_step, t2_step):
     return snapshot_voc, q0_div, q1_div, q2_div
 
 
+def get_all_timesteps(tree):
+    
+    # Determining the timesteps
+    all_timesteps = np.array([data['timestep'] for u, v, data in tree.edges(data=True)])
+    unique_timesteps = np.unique(all_timesteps)
+    
+    return unique_timesteps
+    
+    
+def get_variant_evolution(tree):
+    
+    # Determining all timesteps
+    all_timesteps = get_all_timesteps(tree)
+    
+    # Creating structures to store the results
+    vocs, q0s, q1s, q2s = [], [], [], []
+    
+    # Looping through the timesteps
+    for i in range(1, len(all_timesteps) - 2):
+        
+        # Extracting the current windows
+        t1_step = all_timesteps[i]
+        t2_step = all_timesteps[i+2]
+        
+        # Determining the current variant analysis
+        snapshot_voc, q0_div, q1_div, q2_div = get_variant_analysis(tree, t1_step, t2_step)
+        
+        # Storing the results
+        vocs.append(snapshot_voc)
+        q0s.append(q0_div)
+        q1s.append(q1_div)
+        q2s.append(q2_div)
+        
+    return vocs, q0s, q1s, q2s
+
+
+def get_event_locs(filename):
+
+    # Reading in the data and determining where events occurred
+    mc_events_df = pd.read_csv(filename, delimiter=';', skiprows=1)
+    event_locs = mc_events_df[mc_events_df['event_occurred'] == True]
+    
+    # Determining the timesteps at which the event occurred
+    event_timesteps = event_locs['timestep']
+    unique_timesteps = np.unique(event_timesteps)
+    
+    return unique_timesteps
+
+
 ################################################## MAIN
 
 # Finding all files
 sim_data_files = [file for file in os.listdir(os.getcwd()) if file.startswith(mc_file_path)]
+
+# Creating lists to store the results
+all_vocs = []
 
 # Looping through files
 for counter, filename in enumerate(tqdm(sim_data_files)):
@@ -529,4 +589,27 @@ for counter, filename in enumerate(tqdm(sim_data_files)):
     inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree = get_trees(filename, check_for_cross_immunity)
     
     # Analysing the variants
-    snapshot_voc, q0_div, q1_div, q2_div = get_variant_analysis(transmission_tree, t1_step=50000, t2_step=51000)
+    vocs, q0s, q1s, q2s = get_variant_evolution(transmission_tree)
+    
+    # Storing the results
+    all_vocs.append(vocs)
+
+
+# Determining all simulation timesteps and creating a list to store total vocs
+all_timesteps = get_all_timesteps(transmission_tree)
+total_vocs = np.zeros(shape=all_timesteps.shape)
+
+# Looping throught the variant results
+for current_vocs in all_vocs:
+    
+    # Storing the current results and plotting
+    total_vocs += current_vocs
+    plt.plot(all_timesteps, current_vocs, alpha=0.2, color='firebrick')
+    
+# Overplotting the event locations
+for event in get_event_locs(filename):
+    plt.vlines(x=event, ymin=0, ymax=np.max(vocs), linestyle='dashed')
+    
+# Determining the average result and plotting
+average_vocs = total_vocs / len(all_vocs)
+plt.plot(all_timesteps, average_vocs, color='firebrick')
