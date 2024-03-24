@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import scipy.stats as stats
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -224,7 +225,7 @@ def check_for_infection(G, source_label, target_label, time, reinfection):
 def check_for_recovery(time_infected):
 
     # Converting rate to probability
-    p_recovery = 1 - np.exp(-gamma * time_infected)
+    p_recovery = stats.poisson.pmf(1, gamma)
 
     # Checking if the infected individual has recovery with probability gamma
     return np.random.uniform() < p_recovery
@@ -553,5 +554,4 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
 plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
-
 
