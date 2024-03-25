@@ -26,7 +26,7 @@ N_alive = int(0.8 * N)
 I0 = 1
 
 # Setting simulation data
-n_iterations = 1
+n_iterations = 20
 t_max, dt = 20, 0.2
 
 # Setting epidemiological Parameters
@@ -34,8 +34,8 @@ gamma = 1/10
 sigma = 0
 
 # Setting vital parameters
-p_birth = 0.05
-p_death = 0.05
+p_birth = 0#0.05
+p_death = 0#0.05
 
 
 ##### SUBSTITUTION PARAMETERS
@@ -72,11 +72,11 @@ def get_event_impact(sim_steps, event_times, omega_val):
 
 def get_mosquito_transmission_rate():
 
-    m = np.random.uniform(low=0, high=20)             # number of mosquitoes in the region per human
-    a = np.random.uniform(low=0, high=5)              # rate at which a human is bitten by a mosquito
+    m = np.random.uniform(low=0, high=10)             # number of mosquitoes in the region per human
+    a = np.random.uniform(low=0, high=2)             # rate at which a human is bitten by a mosquito
     b = np.random.uniform(low=0, high=1)              # proportion of infected bites that cause infection in the human host
     c = np.random.uniform(low=0, high=1)              # transmission efficiency from humans to mosquitoes
-    life_exp = np.random.uniform(low=1/21, high=1/7)  # life expectancy of mosquitoes
+    life_exp = np.random.uniform(low=1/21, high=1/14)  # life expectancy of mosquitoes
 
     return (m * a**2 * b * c) * life_exp
 
@@ -237,13 +237,16 @@ def check_for_mutation():
 
 ##### RUNNING THE SIMULATION
 
-def complete_step(G, t, sub_counter):
+def complete_step(G, target_node, t, sub_counter):
 
-    # Finding all living nodes
+    # Finding all living nodes and randomly choosing a source node
     living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == alive])
     
-    # Choosing two neighbours at random within the population
-    source_node, target_node = np.random.choice(living_nodes, size=2, replace=False)
+    # Getting at source node that is not the target node
+    source_node = target_node
+    
+    while source_node == target_node:
+        source_node = np.random.choice(living_nodes)
 
     # Determining the states of the target and source
     target_before, source_during = G.nodes()[target_node]['state'], G.nodes()[source_node]['state']
@@ -253,11 +256,11 @@ def complete_step(G, t, sub_counter):
     source_mutation, target_mutation_before = G.nodes()[source_node]['mutation'], G.nodes()[target_node]['mutation']
     target_mutation_after = target_mutation_before
 
-    # Checking if nodes are S and I
-    if target_before == susceptible and source_during == infected:
+    # Checking if the nodes are S/M and I
+    if target_before == susceptible or target_before == immune and source_during == infected:
 
         # Determining if the node being interacted with is infected and infection is transmitted
-        if check_for_infection(G, source_node, target_node, t, reinfection=False):
+        if check_for_infection(G, source_node, target_node, t, reinfection=(target_before==immune)):
 
             # Initialising new data
             target_after = infected
@@ -280,23 +283,6 @@ def complete_step(G, t, sub_counter):
         if check_for_recovery(time_infected):
             target_after = immune
             target_mutation_after = ''
-
-    # Checking if nodes are M and I
-    elif target_before == immune and source_during == infected:
-
-        # Determining if the node being interacted with is infected and infection is transmitted
-        if check_for_infection(G, source_node, target_node, t, reinfection=True):
-
-            # Initialising new data
-            target_after = infected
-            target_mutation_after = source_mutation
-
-            # Checking for a mutation
-            if check_for_mutation():
-                
-                # Updating the pathogen name to include the substitution
-                target_mutation_after += '_%s' % sub_names[sub_counter]
-                sub_counter += 1
 
     return G, source_node, target_node, source_during, target_before, target_after, target_mutation_after, sub_counter
 
@@ -337,12 +323,15 @@ def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impa
         G, n_births, reborn_nodes = get_birth_dynamics(G, t)
         G, n_deaths, removed_nodes = get_death_dynamics(G, t, event_impact[i])
         
-        # Looping through number of nodes
-        for n in range(G.number_of_nodes()):
+        # Determining the living nodes
+        living_nodes = np.array([node for node in G.nodes() if G.nodes()[node]['vitals'] == alive])
+        
+        # Looping through the living nodes
+        for n in living_nodes:
             
             # Completing an iteration step
             G, source_label, target_label, source_during, target_before, target_after, \
-                target_mutation_after, sub_counter = complete_step(G, t, sub_counter)
+                target_mutation_after, sub_counter = complete_step(G, n, t, sub_counter)
             
             # Updating network if required
             if target_before != target_after:
@@ -542,7 +531,7 @@ omegas = np.linspace(start=0, stop=1, num=10)
 omega_val = omegas[0]
 
 # Repeating the simulation
-prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
+# prop_extinct = repeat_simulation(N, I0, t_max, kappa_val, omega_val, n_iterations)
 
 # Accessing the simulation parameters and creating useful dataframes
 parameters_dict = get_simulation_parameters(kappa_val, omega_val)
