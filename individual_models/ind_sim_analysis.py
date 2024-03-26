@@ -89,7 +89,7 @@ def get_transmission_dict(infection_df):
         was_event = infection_df['event_occurred'][ind]
 
         # Storing the results
-        transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'timestep': t,
+        transmission_dict[ind] = {'source_label': source_label, 'target_label': target_label, 'timestep': ind, 't_index': t,
                                   'transmitted_pathogen': current_pathogen, 'was_reinfection': was_reinfection,
                                   'was_event': was_event}
 
@@ -105,11 +105,11 @@ def get_transmission_tree(transmission_dict):
     for t_ind, data in transmission_dict.items():
     
         # Extracting the data from the current event
-        source_label, target_label, timestep, current_pathogen, reinfection_occurred, \
+        source_label, target_label, timestep, t_index, current_pathogen, reinfection_occurred, \
         was_event = [value for key, value in data.items()]
     
         # Adding an edge between the current source and target nodes and attributing the timestep
-        transmission_tree.add_edge(source_label, target_label, timestep=timestep, \
+        transmission_tree.add_edge(source_label, target_label, timestep=timestep, t_index=t_index, \
                                    transmitted_path=current_pathogen, was_reinfection=reinfection_occurred, was_event=was_event)
 
     return transmission_tree
@@ -134,7 +134,7 @@ def get_substitution_tree(transmission_tree):
     for source_label, target_label, data in sorted_sub_edges[1:]:
 
         # Extracting the data from the current event
-        timestep, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
+        timestep, t_index, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
 
         # Checking if the node already has pathogen name data
         if 'pathogen_history' in sub_tree.nodes[target_label]:
@@ -229,7 +229,7 @@ def get_immune_nodes(sub_tree, phylo_tree):
     for source_label, target_label, data in get_sorted_tree_edges(sub_tree):
 
         # Extracting data from the current event
-        timestep, transmitted_path, was_reinfection, was_event = [value for key, value in data.items()]
+        timestep, t_index, transmitted_path, was_reinfection, was_event = [value for key, value in data.items()]
 
         # Checking if the source node has already been removed, so removing the target if not already removed
         if source_label in removed_node_data and target_label not in removed_node_data:
@@ -290,7 +290,7 @@ def get_edge_removals(cross_tree, sub_tree, removed_node_data):
     for source_label, target_label, data in get_sorted_tree_edges(sub_tree):
 
         # Extracting data from the current event
-        current_timestep, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
+        current_timestep, t_index, transmitted_pathogen, reinfection_occurred, was_event = [value for key, value in data.items()]
 
         # Checking if the source node is in the removed node data
         if source_label in removed_node_data:
@@ -299,7 +299,7 @@ def get_edge_removals(cross_tree, sub_tree, removed_node_data):
             if current_timestep < removed_node_data[source_label]:
 
                 # Adding the edge if required
-                cross_tree.add_edge(source_label, target_label, timestep=current_timestep, transmitted_path=transmitted_pathogen, was_reinfection=reinfection_occurred)
+                cross_tree.add_edge(source_label, target_label, timestep=current_timestep, t_index=t_index, transmitted_path=transmitted_pathogen, was_reinfection=reinfection_occurred)
 
     return cross_tree
 
@@ -586,27 +586,3 @@ for counter, filename in enumerate(tqdm(sim_data_files)):
     check_for_cross_immunity = (parameters_dict['sigma'] != 0)
     inf_df, transmission_dict, transmission_tree, phylogenetic_tree, cross_tree = get_trees(filename, check_for_cross_immunity)
     
-    # Analysing the variants
-    vocs, q0s, q1s, q2s = get_variant_evolution(transmission_tree, all_timesteps)
-
-    # Storing the results
-    all_vocs.append(vocs)
-
-
-# Determining all simulation timesteps and creating a list to store total vocs
-total_vocs = np.zeros(shape=all_timesteps.shape)
-
-# Looping throught the variant results
-for current_vocs in all_vocs:
-    
-    # Storing the current results and plotting
-    total_vocs += current_vocs
-    plt.plot(all_timesteps, current_vocs, alpha=0.2, color='firebrick')
-    
-# Overplotting the event locations
-for event in get_event_locs(filename):
-    plt.vlines(x=event, ymin=0, ymax=np.max(vocs), linestyle='dashed')
-            
-# Determining the average result and plotting
-average_vocs = total_vocs / len(all_vocs)
-plt.plot(all_timesteps, average_vocs, color='firebrick')
