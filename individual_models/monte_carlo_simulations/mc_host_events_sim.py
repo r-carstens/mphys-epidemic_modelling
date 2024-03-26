@@ -21,7 +21,7 @@ alive = 'alive'
 dead = 'dead'
 
 # Setting population data
-N = 1000
+N = 100
 N_alive = int(0.8 * N)
 I0 = 1
 
@@ -34,8 +34,8 @@ gamma = 1/10
 sigma = 0
 
 # Setting vital parameters
-mu_B = 0.15
-mu_D = 0.07
+p_birth = 0#0.05
+p_death = 0#0.05
 
 
 ##### SUBSTITUTION PARAMETERS
@@ -58,7 +58,7 @@ def get_event_times(sim_steps, kappa_val):
 def get_event_impact(sim_steps, event_times, omega_val):
 
     # Initialising an array to store the event impact at each step and increasing rate at step
-    event_impact = np.ones(shape=sim_steps.shape) * mu_D
+    event_impact = np.ones(shape=sim_steps.shape) * p_death
     event_impact[event_times] += omega_val
 
     # Ensuring all rates are reasonable
@@ -135,7 +135,7 @@ def initialise_infections(G, n_nodes, n_infected):
 
 ##### VITAL DYNAMICS
 
-def get_birth_dynamics(G, t, birth_rate):
+def get_birth_dynamics(G, t):
     
     # Determining all the dead nodes
     dead_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == dead])
@@ -145,8 +145,7 @@ def get_birth_dynamics(G, t, birth_rate):
     duration_removed = t - time_of_death
     
     # Determining the probability that the nodes will be reborn
-    p_births = 1 - np.exp(-birth_rate * duration_removed)
-    check_for_birth = np.random.uniform(size=p_births.shape) < p_births
+    check_for_birth = np.random.uniform(size=dead_nodes.shape) < p_birth
 
     # Finding which nodes are reborn and the number of births
     reborn_nodes = dead_nodes[check_for_birth]
@@ -164,7 +163,7 @@ def get_birth_dynamics(G, t, birth_rate):
     return G, n_births, reborn_nodes
 
 
-def get_death_dynamics(G, t, death_rate):
+def get_death_dynamics(G, t, p_death):
     
     # Determining all the living nodes
     living_nodes = np.array([node for node in G.nodes() if G.nodes[node]['vitals'] == alive])
@@ -174,8 +173,7 @@ def get_death_dynamics(G, t, death_rate):
     duration_removed = t - time_of_birth
     
     # Determining the probability that the nodes will be reborn
-    p_deaths = 1 - np.exp(-death_rate * duration_removed)
-    check_for_death = np.random.uniform(size=p_deaths.shape) < p_deaths
+    check_for_death = np.random.uniform(size=living_nodes.shape) < p_death
 
     # Finding which nodes are removed and the number of deaths
     removed_nodes = living_nodes[check_for_death]
@@ -299,7 +297,7 @@ def complete_step(G, t, sub_counter):
                 # Updating the pathogen name to include the substitution
                 target_mutation_after += '_%s' % sub_names[sub_counter]
                 sub_counter += 1
-
+                
     return G, source_node, target_node, source_during, target_before, target_after, target_mutation_after, sub_counter
 
 
@@ -336,7 +334,7 @@ def run_simulation_iteration(G, n_nodes, I0, time_array, event_times, event_impa
     for i, t in enumerate(tqdm(time_array)):
         
         # Simulating vital dynamics
-        G, n_births, reborn_nodes = get_birth_dynamics(G, t, mu_B)
+        G, n_births, reborn_nodes = get_birth_dynamics(G, t)
         G, n_deaths, removed_nodes = get_death_dynamics(G, t, event_impact[i])
         
         # Looping through number of nodes
@@ -554,4 +552,3 @@ susceptible_df, infected_df, immune_df = get_state_dataframes(results_df)
 
 # Plotting the data
 plot_state_totals(susceptible_df, infected_df, immune_df, events_df, parameters_dict)
-
