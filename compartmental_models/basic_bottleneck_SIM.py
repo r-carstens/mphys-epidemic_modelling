@@ -9,8 +9,8 @@ N_star = 1.0      # carrying capacity of system
 ########## EPIDEMIOLOGY DYNAMICS
 
 # Disease 1
-beta = 3          # infection rate
-gamma = 1/14      # recovery (to partial immunity)
+beta = 1.5        # infection rate
+gamma = 1/10      # recovery (to partial immunity)
 sigma = 0         # "breakthrough" rate of partial immunity (between 0 and 1)
 
 ########## BOTTLENECK DYNAMICS
